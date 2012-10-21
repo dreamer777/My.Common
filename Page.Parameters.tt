@@ -1,0 +1,141 @@
+﻿<#@ include file="Common.tt" #>
+<#
+    string xml = ReadLocalFile("Page.Parameters.xml");  
+
+
+    XDocument xDocument = XDocument.Parse(xml);
+    string ns = Aval(xDocument.Root, "namespace");
+	string baseClass = Aval(xDocument.Root, "baseclass")??"PageParametersBase";
+
+    // page parameters classes
+    foreach (XElement dtoElem in CalcXpath( xDocument,"Page.Parameters/class"))
+    {		
+        string pageclassName = Aname(dtoElem);
+		string nsaddon = Aval(dtoElem, "nsaddon");
+		string nsRes = ns + 
+			(string.IsNullOrWhiteSpace(nsaddon)? "" : nsaddon.StartsWith(".")
+			? nsaddon.Trim(): ("." + nsaddon.Trim()));
+
+        WriteLine(dtoHeadTemplate
+			, nsRes
+			, pageclassName
+			, ""
+			, string.Join(NewLine, dtoElem.Elements("f").Where(e=>IsPrimitiveOrArPrimitive(Atype(e))).Select(e=>
+				CalcAssignment(e)).ToArray()
+			)
+			, string.Join(NewLine, dtoElem.Elements("f").Where(e=>!IsPrimitive(Atype(e)) && Ahas(e, "QSname")).Select(e=>
+				CalcAssignment(e)).ToArray()
+			)
+			, "using " + Aval(xDocument.Root, "DALnamespace") + ";"
+			, baseClass  // 6
+		);		
+		
+		WriteLine();
+		WriteLine();
+		
+        foreach (XElement propElem in dtoElem.Elements("f"))
+        {
+			string propName = Aname(propElem);
+			string type = Atype(propElem);
+			string canOmitS = Aval(propElem,"canOmit") ?? "true";
+			bool canOmit = bool.Parse(canOmitS);
+			string summary = Asummary(propElem);
+
+			if(!string.IsNullOrEmpty(summary))
+				WriteLine(summaryTemplate(3), summary);
+			
+			if(!IsValueType(type))
+                WriteLine("            " + (canOmit ? "[CanBeNull]" : "[NotNull]"));
+
+			WriteLine("            public {0} {1} {{ get; set; }}", IsValueType(type) && canOmit?type+"?": type, propName);
+            WriteLine();
+        }
+            
+        WriteLine(footer);
+        
+        SaveOutput(pageclassName + ".Parameters.cs");
+    }   
+#>
+<#+ 
+	static bool IsPrimitiveOrArPrimitive(string typename)
+	{
+		if(IsPrimitive(typename)) return true;
+		
+		if(typename.EndsWith("[]")) 
+			return IsPrimitive(typename.Substring(0, typename.Length-2));
+		
+		return false;
+	}
+	static string CalcAssignment(XElement f)
+	{
+		string type = Atype(f);
+		if(type.EndsWith("[]")) type = type.Substring(0, type.Length-2)+"Ar";
+		return string.Format(@"                {0} = Get{2}FromQueryString(_c, ""{1}"", {5}{3}){4};",
+					Aname(f), 
+					!Ahas(f,"QSname")? Aname(f) : Aval(f, "QSname"), 
+					FirstUpper(type),
+					Aval(f,"canOmit") ?? "true",
+					IsValueType(Atype(f)) && !Abool(f, "canOmit", true) ? ".Value" : ""
+					, IsPrimitiveOrArPrimitive(Atype(f))? "" : "_db, "
+			);
+	}
+
+
+		// ns, page class name, class summary
+        static string dtoHeadTemplate = @"#region usings
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Web;
+
+using JetBrains.Annotations;
+
+{5}
+using My.Common.Web;
+
+
+#endregion
+
+
+
+namespace {0}
+{{
+    public partial class {1}
+    {{
+        [Serializable]
+        [UsedImplicitly]
+        public partial class Parameters : {6}
+        {{
+            [NotNull] readonly HttpContext _c;
+            [NotNull] readonly Db _db;        
+            
+
+            public Parameters([NotNull] HttpContext c, [NotNull] Db db)
+            {{
+                _c = c;
+                _db = db;
+
+                Set();
+            }}
+
+
+            // ReSharper disable PossibleInvalidOperationException
+            // ReSharper disable AssignNullToNotNullAttribute
+            void Set()
+            {{
+{3}
+                ResetObjects();
+            }}
+            public void ResetObjects()
+            {{
+{4}
+                FillAddon();
+            }}
+            partial void FillAddon();
+            // ReSharper restore PossibleInvalidOperationException
+            // ReSharper restore AssignNullToNotNullAttribute";
+         
+            static string footer = @"        }
+    }
+}";           
+#>

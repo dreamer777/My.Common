@@ -1,0 +1,480 @@
+﻿<?xml version='1.0' encoding='utf-8' ?>
+<objects namespace='UC.Auctions.DAL' ConnectionStringName='UC.Auctions'>
+
+    <dto name='UserActivityDTO' tableName='UserActivities ua' generateFinder='' 
+         debuggerdisplay='UserId={UserId}, RawUrl={RawUrl}, Browser={Browser}'
+         insertable=''>
+        <p name='UserActivityId' type='int' id=''/>
+        <p name='UserId' type='int' finder='liststandart' insertable=''/>
+        <p name='IsChangePsw' type='bool' finder='' insertable=''/>
+        <p name='CreatedDate' type='DateTime' finder=''/>
+        <p name='RawUrl' type='string' nullable='true' finder='' insertable=''/>
+        <p name='Browser' type='string' nullable='true' finder='' insertable=''/>
+        <p name='UserHostAddress' type='string' nullable='true' finder='' insertable=''/>
+
+        <finderAddonFields>
+            <p name='TenderTypeId' type='List&lt;int&gt;' canFindByNull='false'/>
+            <p name='NotUserId' type='List&lt;int&gt;' canFindByNull='false'/>
+        </finderAddonFields>
+
+    </dto>
+
+
+    <dto name='PlayTenderVisitorDTO' tableName='PlayTenderVisitors ptv' insertable='void'
+         generateFinder=''>
+        <p name='PlayTenderVisitorsId' type='int' id=''/>
+        <p name='UserId' type='int' insertable='' finder='liststandart'/>
+        <p name='TenderId' type='int' insertable='' finder='liststandart'/>
+        <p name='CreatedDate' type='DateTime' finder=''/>
+
+        <findMethod>
+            <p name='TenderId'/>
+        </findMethod>
+
+        <finderAddonFields>
+            <p name='SupplierId' type='List&lt;int&gt;' canFindByNull='false'/>
+        </finderAddonFields>
+    </dto>
+
+    <dto name='ConfirmationDTO' tableName='Confirmations c' insertable='' updateable=''
+         generateFindByIdMethod=''>
+        <p name='TenderId' type='int' insertable=''/>
+        <p name='SupplierId' type='int' insertable=''/>
+
+        <p name='Key' type='Guid' id=''/>
+        <p name='CreatedDate' type='DateTime'/>
+        <p name='ConfirmedDate' type='DateTime?' updateable=''/>
+        <p name='ConfirmedUserId' type='int?' updateable=''/>
+
+        <p name='ReminderKey' type='Guid?' updateable=''/>
+        <p name='CreatedDateReminderKey' type='DateTime?' updateable=''/>
+        <p name='ConfirmedReminderDate' type='DateTime?' updateable=''/>
+        <p name='ConfirmedReminderUserId' type='int?' updateable=''/>
+
+        <findMethod return='one'>
+            <p name='ReminderKey'/>
+        </findMethod>
+
+        <findMethod return='one'>
+            <p name='TenderId'/>
+            <p name='SupplierId'/>
+        </findMethod>
+
+        <findMethod>
+            <p name='TenderId'/>
+        </findMethod>
+    </dto>
+
+
+    <dto name='StakeDTO' tableName='Stakes s' insertable='' debuggerdisplay='bid={BidId} priceorig={UnitPriceOriginal} cur={CurrencyId} {Quantity} {Accepted}'
+         generateFinder='' >
+        <p name='StakeId' type='int' id=''/>
+        <p name='BidId' type='int' insertable='' finder='liststandart'/>
+
+        <p name='CurrencyId' type='int' insertable='' finder='liststandart'/>
+
+        <p name='UnitPriceOriginal' type='decimal' insertable=''/>
+        <p name='UnitPriceBidCurrency' type='decimal' insertable='' finder='range'/>
+        <p name='UnitPriceReduced' type='decimal' summary='In bids currency' insertable=''/>
+
+        <p name='Quantity' type='decimal?' insertable='' finder='range'/>
+
+        <p name='SuggestedDelay' type='int?' insertable=''/>
+
+        <p name='Info' type='string' nullable='true' insertable=''/>
+
+        <p name='Accepted' type='bool' insertable='' finder=''/>
+        <p name='ErrorMessage' type='string' nullable='true' insertable=''/>
+
+        <p name='CreatorUserId' type='int' insertable='' finder='liststandart'/>
+        <p name='CreatorSupplierId' type='int' insertable='' finder='liststandart'/>
+
+        <p name='CreatedDate' type='DateTime' finder=''/>
+        <p name='Place' type='int?'/>
+
+        <finderAddonFields>
+            <p name='TenderId' type='int' canFindByNull='false'/>
+        </finderAddonFields>
+    </dto>
+
+
+    <dto name='BidDTO' tableName='Bids b' insertable='' updateable='' generateFindByIdMethod='custom' deleteableById=''
+         debuggerdisplay='BidId={BidId} NID={NomenclatureId} Qnt={Quantity}'>
+        <p name='BidId' type='int' id=''/>
+        <p name='TenderId' type='int' insertable=''/>
+        <p name='NomenclatureId' type='int' insertable='' updateable=''/>
+
+        <p name='Quantity' type='decimal?' insertable='' updateable=''/>
+        <p name='QuantityMin' type='decimal?' insertable='' updateable=''/>
+        <p name='QuantityStep' type='decimal?' insertable='' updateable=''/>
+
+        <p name='MaxUnitPrice' type='decimal?' insertable='' updateable=''/>
+        <p name='PriceStep' type='decimal?' insertable='' updateable=''/>
+
+        <p name='PaymentDelay' type='int?' insertable='' updateable=''/>
+
+        <p name='CurrencyId' type='int' insertable='' updateable=''/>
+
+        <p name='CreatorUserId' type='int' insertable=''/>
+        <p name='CreatedDate' type='DateTime'/>
+
+        <p name='Nomenclature' type='NomenclatureDTO' notfromdb=''/>
+
+        <p name='LastUpdatorUserId' type='int' insertable='' updateable=''/>
+
+        <p name='Attributes' type='List&lt;AttributeValueDTO&gt;' notfromdb='true'  />
+        <p name='Description' type='string' nullable='true' updateable='' insertable=''/>
+        <p name='UseNomenDescInOwnDesc' type='bool' updateable=''/>
+
+        <findMethod return='list' custom=''>
+            <p name='TenderId'/>
+        </findMethod>
+
+        <findMethod nameAddon='ByNomenId'>
+            <p name='NomenclatureId'/>
+        </findMethod>
+    </dto>
+
+
+    <dto name='FileDTO' tableName='Files f' insertable='void' updateable='void' generateFindByIdMethod=''
+         tostring=''
+         debuggerdisplay='{FileId} {FileName}'>
+        <p name='FileId' type='int' id=''/>
+        <p name='FileName' type='string' nullable='false' insertable='' />
+        <p name='Name' type='string' nullable='false' insertable='' updateable=''/>
+        <p name='Description' type='string' nullable='true' insertable='' updateable=''/>
+        <p name='ContentType' type='string' nullable='true' insertable='' />
+        <p name='CreatedDate' type='DateTime'/>
+    </dto>
+
+
+    <dto name='TenderDTO' tableName='Tenders t' debuggerdisplay='{TenderId} {TenderName}' insertable='' updateable=''
+         tostring=''
+         generateFindByIdMethod='custom'
+         generateFinder=''>
+        <p name='TenderId' type='int' id='' finder=''/>
+
+        <p name='TenderName' type='string' nullable='false' insertable='' updateable='' finder=''/>
+        <p name='TenderDescription' type='string' nullable='true' insertable='' updateable='' finder=''/>
+
+        <p name='TenderTypeId' type='int' insertable='' updateable='' finder='list'/>
+        <p name='TenderStatusId' type='int' updateable='' finder='list'/>
+
+        <p name='TenderCustomerId' type='int' insertable='' updateable=''/>
+        <p name='OrganizerEmail' type='string' nullable='true' insertable='' updateable='' finder=''/>
+
+        <p name='StartDate' type='DateTime' insertable='' updateable='' finder=''/>
+        <p name='EndDatePlanned' type='DateTime' insertable='' updateable=''/>
+        <p name='EndDateFact' type='DateTime?' updateable=''/>
+
+        <p name='BlindSectionTime' type='int?' insertable='' updateable=''/>
+        <p name='IsAutoContinue' type='bool' insertable='' updateable='' finder=''/>
+        <p name='IsClosed' type='bool' insertable='' updateable='' finder=''/>
+        <p name='WithStakeInfo' type='bool' insertable='' updateable='' finder=''/>
+
+        <p name='AcceptedDateByRIO' type='DateTime?' updateable=''/>
+        <p name='AcceptedDateBySVK' type='DateTime?' updateable=''/>
+        <p name='CommentByRIO' type='string' nullable='true' updateable='' finder=''/>
+        <p name='CommentBySVK' type='string' nullable='true' updateable='' finder=''/>
+        <p name='RIOUserId' type='int?' updateable='' />
+        <p name='SVKUserId' type='int?' updateable='' />
+
+        <p name='CreatorUserId' type='int' insertable=''/>
+        <p name='CreatedDate' type='DateTime' finder=''/>
+
+        <p name='Files' type='List&lt;FileDTO&gt;' notfromdb='true'/>
+        <p name='Bids' type='List&lt;BidDTO&gt;' notfromdb='true'/>
+
+        <p name='LastUpdatorUserId' type='int' insertable='' updateable=''/>
+
+        <finderAddonFields>
+            <p name='AcceptedByRIO' type='bool' />
+            <p name='AcceptedBySVK' type='bool' />
+            <p name='EndDateBegin' type='DateTime' />
+            <p name='EndDateEnd' type='DateTime' />
+            <p name='NomenclatureSearchString' type='string'/>
+            <p name='CurrencyId' type='List&lt;int&gt;' />
+            <p name='SupplierId' type='int' summary='По участнику'/>
+            
+            <p name='SourceTown' type='string' summary='Для логистических аукционов.'/>
+            <p name='DestinationTown' type='string' summary='Для логистических аукционов.'/>
+        </finderAddonFields>
+    </dto>
+
+
+    <dto name='TenderStatusDTO' generateGetAllMethod='order by OrderNumber' debuggerdisplay='{TenderStatusId} {TenderStatusName}'
+         tableName='TenderStatuses ts'>
+        <p name='TenderStatusId' type='int' id=''/>
+        <p name='OrderNumber' type='int'/>
+        <p name='TenderStatusName' type='string' nullable='false'/>
+    </dto>
+
+
+    <dto name='TenderTypeDTO' generateGetAllMethod='order by TenderTypeId' debuggerdisplay='{TenderTypeId} {Name}'
+            tableName='TenderTypes tt' generateFindByIdMethod='custom' updateable='void'
+            generateFinder=''>
+        <p name='TenderTypeId' type='int' id='' />
+
+        <p name='Name' type='string' nullable='false' updateable='' finder=''/>
+        <p name='Description' type='string' nullable='true' updateable=''/>
+
+        <!--Создание лотов-->
+        <p name='BidCurrencyDefault' type='int' updateable=''/>
+        <p name='PaymentDelayDefault' type='int?' updateable=''/>
+        <p name='PriceStepDefault' type='decimal?' updateable=''/>
+
+        <!--Проведение аукциона-->
+        <p name='WinnersCount' type='int' updateable=''/>
+        <p name='MinParticipantsCount' type='int?' updateable=''/>
+        <p name='StakeFallingNotification' type='int?' updateable=''/>
+        <p name='UsePaymentDelay' type='bool' updateable=''/>
+        <p name='ShowQuantityIfEmpty' type='bool' updateable=''/>
+        <p name='CurrencyOnlyRub' type='bool' updateable=''/>
+
+        <!--Создание аукциона-->
+        <p name='WithStakeInfoDefault' type='bool' updateable=''/>
+        <p name='AutoContinueDuration' type='int?' updateable=''/>
+        <p name='IsClosedDefault' type='bool' updateable=''/>
+        <p name='TenderDurationDefault' type='int?' updateable=''/>
+        <p name='OrganizerEmailDefault' type='string' nullable='true' updateable=''/>
+        <p name='BlindSectionDurationDefault' type='int?' updateable='' />
+        <p name='AcceptedSuppliersByDefault' type='bool' updateable=''/>
+
+        <p name='IsLogistics' type='bool' updateable=''/>
+        
+        <p name='SuppliersCount' type='int' notfromdb=''/>
+        <p name='TendersCount' type='int' notfromdb=''/>
+        <p name='NomenclatureGroups' type='List&lt;NomenclatureGroupDTO&gt;' notfromdb='' summary='Явно заданные группы, безо всякого учета наследования.'/>
+    </dto>
+
+
+    <dto name='CurrencyDTO'  generateGetAllMethod='order by CurrencyId'  tableName='v_currencies c'
+         generateFindByIdMethod=''
+         debuggerdisplay='{LongName} ({CurrencyId})'>
+        <p name='CurrencyId' type='int' id='' summary='Числовой код ISO 4217'/>
+        <p name='Symbol' type='string' nullable='true' summary='Буквенный код валюты ISO 4217'/>
+        <p name='ShortCode' type='string' nullable='false'/>
+        <p name='LongName' type='string' nullable='false'/>
+        <p name='Decimals' type='byte' />
+    </dto>
+
+
+    <dto name='CurrencyRateDTO' tableName='CurrencyRates cr' insertable='void'
+         debuggerdisplay='from: {CurrencyFromId} {AmountFrom}, to: {CurrencyToId} {AmountTo}'>
+        <p name='CurrencyFromId' type='int' insertable=''/>
+        <p name='AmountFrom' type='decimal' insertable=''/>
+        <p name='CurrencyToId' type='int' insertable=''/>
+        <p name='AmountTo' type='decimal' insertable=''/>
+        <p name='ForDate' type='DateTime' insertable=''/>
+        <p name='CreatedDate' type='DateTime'/>
+    </dto>
+
+
+    <dto name='UnitDTO' generateGetAllMethod='order by BigName' summary='Единицы измерения' tableName='Units un'
+         generateFindByIdMethod=''
+         debuggerdisplay='{SmallName} ({UnitId})' tostring=''>
+        <p name='UnitId' type='int' id=''/>
+        <p name='SmallName' type='string' nullable='false' />
+        <p name='BigName' type='string' nullable='false' />
+        <p name='FloatDecimals' type='int' summary='Сколько знаков после запятой'/>
+    </dto>
+
+
+    <dto name='AttributeDTO' generateGetAllMethod='order by AttributeName' tableName='Attributes a' insertable='' updateable=''
+         generateFindByIdMethod='custom' generateFinder=''
+         deleteableById=''
+         debuggerdisplay='{Name} ({AttributeId})'>
+        <p name='AttributeId' id='' type='int' finder=''/>
+        <p name='Name' dbname='AttributeName' type='string' nullable='false' updateable='' insertable='' finder=''/>
+        <p name='Description' type='string' nullable='true' updateable='' insertable='' finder=''/>
+        <p name='UnitId' type='int' updateable='' insertable='' finder='list'/>
+
+        <p name='Unit' type='UnitDTO' notfromdb=''/>
+
+        <p name='CreatorUserId'  type='int' insertable=''/>
+        <p name='CreatedDate' type='DateTime' finder=''/>
+    </dto>
+
+
+    <dto name='AttributeValueDTO' debuggerdisplay='{Name} ({AttributeId}) Value=[{Value}]'
+         insertable='void' updateable='void' tableName='AttributesByNomenclatureGroups abng, AttributesByNomenclatures abn, AttributesByBids abb'
+         deleteableById=''
+         >
+        <p name='Id' type='int' id='AttributesByNomenclatureGroupsId, AttributesByNomenclaturesId, AttributesByBidsId' />
+
+        <p name='AttributeId' type='int' updateable='' insertable='' />
+        <p name='Name' dbname='AttributeName' type='string' nullable='false' />
+        <p name='Description' type='string' nullable='true' />
+        <p name='UnitId' type='int' />
+
+        <p name='Unit' type='UnitDTO' notfromdb=''/>
+
+        <p name='ObjectId' type='int' summary='Номенклатура, группа номенклатур, или лот' insertable='NomenclatureGroupId, NomenclatureId, BidId' />
+        <p name='Value' type='string' nullable='true' updateable='' insertable='' />
+
+        <p name='CreatorUserId'  type='int' insertable=''/>
+        <p name='CreatedDate' type='DateTime'/>
+    </dto>
+
+
+    <dto name='NomenclatureDTO' generateFindByIdMethod='custom' insertable='' updateable='' tableName='Nomenclatures n'
+         generateFinder='' deleteableById=''
+         debuggerdisplay='{Name} ({NomenclatureId})'>
+        <p name='NomenclatureId' type='int'  id='' finder=''/>
+        <p name='NomenclatureGroupId' type='int' insertable=''  />
+
+        <p name='Name' type='string' nullable='false' insertable='' updateable='' finder=''/>
+        <p name='Description' type='string' nullable='true' insertable='' updateable='' finder=''/>
+
+        <p name='UnitId' type='int?' insertable='' updateable=''/>
+
+        <p name='Unit' type='UnitDTO' notfromdb=''/>
+        <p name='Attributes' type='List&lt;AttributeValueDTO&gt;' notfromdb=''  insertable=''/>
+
+        <p name='CreatorUserId'  type='int' insertable=''/>
+        <p name='CreatedDate' type='DateTime'/>
+    </dto>
+
+
+    <dto name='NomenclatureGroupDTO' insertable='' updateable='' tableName='NomenclatureGroups ng' generateFindByIdMethod='custom'
+          generateFinder='order by Name' generateGetAllMethod='order by Name'
+         debuggerdisplay='{Name} ({NomenclatureGroupId})'>
+        <p name='NomenclatureGroupId' type='int' id='' finder=''/>
+        <p name='ParentGroupId' type='int?' insertable=''/>
+
+        <p name='Name' type='string' nullable='false' insertable='' updateable='' finder=''/>
+        <p name='Description' type='string' nullable='true' insertable='' updateable='' finder=''/>
+
+        <p name='Nomenclatures' type='List&lt;NomenclatureDTO&gt;' notfromdb='true'  insertable=''/>
+        <p name='Attributes' type='List&lt;AttributeValueDTO&gt;' notfromdb='true'  insertable='' finder=''/>
+
+        <p name='AllowEqualNomenNames' type='bool' updateable=''/>
+
+        <p name='CreatorUserId'  type='int' insertable=''/>
+        <p name='CreatedDate' type='DateTime' finder='' />
+
+        <findMethod return='list'>
+            <p name='ParentGroupId' />
+        </findMethod>
+    </dto>
+
+
+    <dto name='UserDTO' updateable='' generateFindByIdMethod='custom' tableName='Users u' insertable=''
+         generateFinder=''
+         debuggerdisplay='{Login} ({UserId})'>
+        <p name='UserId' type='int' id='' finder=''/>
+
+        <p name='Login' type='string' nullable='false' insertable='' finder=''  updateable=''/>
+        <p name='PasswordHash' type='string' nullable='false' updateable='' insertable=''/>
+
+        <p name='UserFio' type='string' nullable='true' dbname='UserFIO' updateable='' insertable='' finder=''/>
+
+        <p name='Telephone' type='string' nullable='true'  updateable='' insertable='' finder=''/>
+        <p name='Fax' type='string' nullable='true'  updateable='' insertable='' finder=''/>
+        <p name='Email' type='string' nullable='true'  updateable='' insertable='' finder=''/>
+
+        <p name='SupplierId' type='int?' updateable='' insertable='' finder='list' />
+
+        <p name='IsActive' type='bool'  updateable='' insertable='' finder=''/>
+
+        <p name='CreatorUserId'  type='int?' insertable=''/>
+        <p name='CreatedDate' type='DateTime' finder=''/>
+
+        <p name='LastActivityDate' type='DateTime' notfromdb=''/>
+        <p name='LastPasswordChangeDate' type='DateTime' notfromdb=''/>
+
+        <p name='Groups' type='List&lt;UserGroupDTO&gt;' notfromdb='true'  insertable='' finder=''/>
+        <p name='Roles' type='List&lt;UserRoleDTO&gt;' notfromdb='true' finder='' summary='Объединение RolesByUser и RolesByGroups.'/>
+        <p name='RolesByUser' type='List&lt;UserRoleDTO&gt;' notfromdb='true'  insertable=''/>
+        <p name='RolesByGroups' type='List&lt;UserRoleDTO&gt;' notfromdb='true' />
+
+        <p name='EnabledTenderTypes' type='List&lt;TenderTypeDTO&gt;' notfromdb='true' />
+        <p name='TenderTypes' type='List&lt;KeyValuePair&lt;TenderTypeDTO, bool&gt;&gt;' notfromdb='true' 
+           summary='Список доступных тт через поставщика, если неадмин. kvp.Value - включен или выключен'/>
+
+        <p name='Supplier' type='SupplierDTO' notfromdb='true'/>
+        <finderAddonFields>
+            <p name='SupplierName' type='string' canFindByNull='true'/>
+            <p name='TenderTypes' type='List&lt;int&gt;' canFindByNull='true'/>
+        </finderAddonFields>
+
+        <findMethod custom='' nameAddon='' return='one'>
+            <p name='Login' />
+        </findMethod>
+        <findMethod custom='' return='one'>
+            <p name='Login' />
+            <p name='PasswordHash' />
+        </findMethod>
+    </dto>
+
+
+    <dto name='UserRoleDTO' generateGetAllMethod='order by UserRoleId desc' tableName='UserRoles ur'
+         debuggerdisplay='{Name} ({UserRoleId})'>
+        <p name='UserRoleId' type='int'/>
+        <p name='Name' type ='string' nullable='false'/>
+        <p name='Description' type='string' nullable='true'/>
+    </dto>
+
+
+    <dto name='UserGroupDTO' generateGetAllMethod='order by Name asc' updateable='' tableName='UserGroups ug'
+         insertable=''
+         debuggerdisplay='{Name} ({UserGroupId})'>
+        <p name='UserGroupId' type='int' id=''/>
+        <p name='Name' type ='string' nullable='false' updateable='' insertable=''/>
+        <p name='Description' type='string' nullable='true' updateable='' insertable=''/>
+        <p name='CreatorUserId'  type='int' insertable=''/>
+        <p name='CreatedDate' type='DateTime'/>
+    </dto>
+
+    <dto name='UserPwdGuidDTO' updateable='' insertable='' tableName='UserPwdGuids upg'
+         debuggerdisplay='{UserId} {Guid}'>
+        <p name='Guid' type='Guid' id='' insertable=''/>
+        <p name='UserId' type='int' nullable='false' updateable='' insertable=''/>
+        <p name='UsedDate' type='DateTime?' updateable='' />
+        <p name='CreatedDate' type='DateTime' nullable='false' updateable='' insertable='' />
+
+        <p name='User' type='UserDTO' notfromdb='true'/>
+        <p name='IsLast' type ='int' notfromdb='true'/>
+
+        <findMethod custom='' nameAddon='' return='one'>
+            <p name='UserId' />
+        </findMethod>
+        <findMethod custom='' nameAddon='' return='one'>
+            <p name='Guid' />
+        </findMethod>
+    </dto>
+
+
+    <dto name='TenderChangeHistoryDTO' tableName='TenderChangeHistory tch' insertable='void'>
+        <p name='TenderId' type='int' insertable=''/>
+        <p name='UserId' type='int' insertable=''/>
+        <p name='Description' type='string' nullable='false' insertable=''/>
+        <p name='CreatedDate' type='DateTime'/>
+
+        <findMethod>
+            <p name='TenderId'/>
+        </findMethod>
+    </dto>
+
+    <dto name='FilesByTenderDTO' tableName='FilesByTender fbt' insertable=''>
+        <p name='TenderId' type='int' id='' insertable=''/>
+        <p name='FileId' type='int' id='' insertable=''/>
+
+        <findMethod nameAddon='' return='list'>
+            <p name='TenderId' />
+        </findMethod>
+    </dto>
+
+    <dto name='EmailMessageDTO' tableName='EmailMessages em' insertable='' updateable='void'>
+        <p name='EmailMessageId' type='int' id=''/>
+
+        <p name='EmailFrom' type='string' nullable='false' insertable=''/>
+        <p name='EmailTo' type='string' nullable='false' insertable=''/>
+        <p name='Title' type='string' nullable='false' insertable=''/>
+        <p name='Body' type='string' nullable='false' insertable=''/>
+
+        <p name='Status' type='string' nullable='true' updateable=''/>
+
+        <p name='CreatedDate' type='DateTime'/>
+    </dto>
+</objects>

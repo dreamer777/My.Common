@@ -1,0 +1,57 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<xs:schema id="Page.Parameters" attributeFormDefault="unqualified" elementFormDefault="qualified" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+    <xs:element name="Page.Parameters">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element maxOccurs="unbounded" name="class">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:choice minOccurs="0" maxOccurs="unbounded">
+
+                                <xs:element name="f">
+                                    <xs:complexType>
+                                        <xs:attribute name="name" type="xs:string" use="required" />
+                                        <xs:attribute name="QSname" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Имя в QueryString. Если не указано, то берется атрибут name
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="type" type="xs:string" use="required" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Тип .NET
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="summary" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Summary у поля в классе.
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="canOmit" type="xs:boolean" use="optional" />
+                                    </xs:complexType>
+                                </xs:element>
+                            </xs:choice>
+                        </xs:sequence>
+                        <xs:attribute name="name" type="xs:string" use="required" />
+                        <xs:attribute name="nsaddon" type="xs:string" use="optional">
+                            <xs:annotation>
+                                <xs:documentation>
+                                    Суффикс в namespace этого класса.
+                                </xs:documentation>
+                            </xs:annotation>
+                        </xs:attribute>
+
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+            <xs:attribute name="namespace" type="xs:string" use="required" />
+            <xs:attribute name="DALnamespace" type="xs:string" use="required" />
+            <xs:attribute name="baseclass" type="xs:string" use="optional" />
+        </xs:complexType>
+    </xs:element>
+</xs:schema>

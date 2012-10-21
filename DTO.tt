@@ -1,0 +1,1460 @@
+﻿<#@ include file="Common.tt" #>
+<#
+    List<XDocument> xDocumentList = ReadLocalXmls("DTO*.xml");
+	
+	string[] nss = xDocumentList.Where(xd=>Ahas(xd.Root, "namespace")).Select(xd=>Aval(xd.Root, "namespace")).Distinct().ToArray();
+	if(nss.Length>1)
+		throw new Exception("Namespaces do not match.");
+	if(nss.Length==0)
+		throw new Exception("No namespace");
+	
+    string ns = nss[0];
+	
+	string[] connectionStringNames = xDocumentList.Where(xd=>Ahas(xd.Root, "ConnectionStringName")).Select(xd=>Aval(xd.Root, "ConnectionStringName")).Distinct().ToArray();
+	if(connectionStringNames.Length>1)
+		throw new Exception("ConnectionStringNames do not match.");
+	if(connectionStringNames.Length==0)
+		throw new Exception("No ConnectionStringName");
+	
+    string connectionStringName = connectionStringNames[0];
+	
+
+	List<XElement> dtoElems = xDocumentList.SelectMany(xd => xd.Root.Elements("dto")).ToList();
+
+
+
+    foreach (XElement dtoElem in dtoElems)
+    {
+        // DTO classes
+        string dtoName = Aname(dtoElem);
+
+        string typeSummary = Asummary(dtoElem);
+        if (Ahas(dtoElem, "updateable")) typeSummary += " Updateable. ";
+        if (Ahas(dtoElem, "tableName")) typeSummary += string.Format(" tableName={0}. ", Aval(dtoElem, "tableName"));
+        if (Ahas(dtoElem, "xmlserializable")) typeSummary += "XmlSerializable.";
+        typeSummary = typeSummary == "" ? "" : (NewLine + string.Format(summaryTemplate(1), typeSummary));
+        
+        if (Ahas(dtoElem, "debuggerdisplay"))
+            typeSummary += NewLine +
+                string.Format(@"    [DebuggerDisplay(""{0}"")]", Aval(dtoElem, "debuggerdisplay"));
+
+        WriteLine(dtoHeadTemplate, ns, dtoName, typeSummary);
+
+		// constructor
+        if (Ahas(dtoElem, "insertable") && CalcXpath(dtoElem, "p[@insertable]").Count>0)
+        {
+            List<XElement> insProps = CalcXpath(dtoElem, "p[@insertable]");
+
+            WriteLine(@"        public {0}(){{}}", dtoName);
+            WriteLine("");
+
+            WriteLine(@"
+        /// <summary>
+        /// For insert
+        /// </summary>
+{3}        public {0}({1})
+        {{
+{2}
+        }}", dtoName,
+                string.Join(", ", insProps.Select(p => string.Format("{0}{1} {2}",
+                    (!Ahas(p, "nullable")) ? "" : bool.Parse(Aval(p, "nullable")) ? "[CanBeNull] " : "[NotNull] ",
+                    Atype(p) + (IsValueType(Atype(p)) && Ahas(p, "nullable") &&  bool.Parse(Aval(p, "nullable")) ? "?":""),
+                    Aname(p).ToLower()
+                    )).ToArray()),
+                string.Join("", insProps.Select(p => string.Format(@"            {0} = {1};"+NewLine
+					, Aname(p), Aname(p).ToLower())).ToArray()),
+                string.Join("", insProps.Where(p=>!string.IsNullOrEmpty(Asummary(p))).Select(p => string.Format(@"        ///<param name=""{0}"">{1}</param>"+NewLine
+					, Aname(p).ToLower(), Asummary(p))).ToArray())
+                );
+
+                WriteLine();
+                WriteLine();
+        }
+
+		// props
+        foreach (XElement propElem in dtoElem.Elements("p"))
+        {
+            string propName = Aname(propElem);
+            string dbName = Adbname(propElem);
+            string propType = Atype(propElem);
+
+            string propSummary = Asummary(propElem);
+            if (dbName != propName) propSummary += string.Format(" dbName={0}. ", dbName);
+            if (Ahas(propElem, "updateable")) propSummary += " Updateable. ";
+            if (Ahas(propElem, "notfromdb")) propSummary += " Not from db. ";
+            if (Ahas(propElem, "id")) propSummary += " PK. ";
+            if (!string.IsNullOrEmpty(propSummary))
+                WriteLine(summaryTemplate(2), propSummary);
+
+            XAttribute attr = propElem.Attribute("nullable");
+
+            if (Ahas(dtoElem, "xmlserializable"))
+                WriteLine("        " + (attr == null || !bool.Parse(attr.Value) ? "[XmlElement(IsNullable = false)]" : "[XmlElement(IsNullable = true)]"));
+
+            if (Ahas(propElem, "xmlignore"))
+                WriteLine("        [XmlIgnore]");
+            
+            if (attr != null)
+                WriteLine("        " + (bool.Parse(attr.Value) ? "[CanBeNull]" : "[NotNull]"));
+            WriteLine("        public {0}{2} {1} {{ get; set; }}", propType, propName, IsValueType(propType)&&attr != null && bool.Parse(attr.Value)? "?":"");
+            WriteLine();
+        }
+
+		List<XElement> idElems = CalcXpath(dtoElem, "p[@id]").ToList();
+
+		// InteriorEquals
+		WriteLine(@"        protected override bool InteriorEquals({0} other)
+        {{", dtoName);		
+		if(idElems.Count==0) 
+			WriteLine("            return true;");
+		else
+			WriteLine( "            return " + string.Join(" && ",  idElems.Select(e => string.Format("this.{0} == other.{0}", Aname(e)))) + ";");
+		WriteLine(@"        }");
+		
+		// GetHashCode
+		if(idElems.Count>0)
+		WriteLine(@"        public override int GetHashCode()
+        {{
+            return {0};
+        }}", idElems.Count==0?"base.GetHashCode()": string.Join(" & ", idElems.Select(e=>string.Format("this.{0}.GetHashCode()", Aname(e)))));
+
+		// ToString
+        if (Ahas(dtoElem, "tostring"))
+        {
+            bool isEmpty = Aval(dtoElem, "tostring") == "";
+            WriteLine(@"        
+        public override string ToString()
+        {{
+            {0}
+        }}"
+                , isEmpty ? "return " + GetToStringByDebuggerDisplay(Aval(dtoElem, "debuggerdisplay")) + ";": Aval(dtoElem, "tostring").Trim());
+        }
+
+        WriteLine(footer);
+
+        SaveOutput(dtoName + ".cs");
+    }
+
+
+    // finder classes
+    foreach (XElement dtoElem in dtoElems.Where(e=>Ahas(e, "generateFinder")))
+    {
+        string dtoName = Aname(dtoElem);
+		List<XElement> idElems = CalcXpath(dtoElem, "p[@id]").ToList();
+
+        WriteLine(finderHeadTemplate, ns, dtoName + "Finder", null);
+
+        foreach (XElement propElem in CalcXpath(dtoElem, "p[@finder]"))
+        {
+            string propName = Aname(propElem);
+            string propType = Atype(propElem);
+            string finderType = Aval(propElem, "finder");
+			
+			string summary = Asummary(propElem);
+			if(string.IsNullOrWhiteSpace(summary)) summary = null;
+
+            if (finderType.StartsWith("list", StringComparison.InvariantCultureIgnoreCase))
+			{
+				if(summary!=null) WriteLine(summaryTemplate(2), summary);			
+                WriteLine("        [CanBeNull] public List<{1}> {0} {{ get; set; }}", propName, propType);
+			}
+            else
+            {
+                if (propType.StartsWith("DateTime") || finderType=="range")
+                {
+					if(summary!=null) WriteLine(summaryTemplate(2), summary);			
+                    WriteLine("        [CanBeNull] public {1}{2} {0}Begin {{ get; set; }}", propName, propType, IsValueType(propType)?"?":"");
+					if(summary!=null) WriteLine(summaryTemplate(2), summary);			
+                    WriteLine("        [CanBeNull] public {1}{2} {0}End {{ get; set; }}", propName, propType, IsValueType(propType)?"?":"");
+                }
+                else if (propType == "bool")
+				{
+					if(summary!=null) WriteLine(summaryTemplate(2), summary);			
+                    WriteLine("        [CanBeNull] public {1}? {0} {{ get; set; }}", propName, propType);
+				}
+                else if (propType == "string" || propType == "int" || propType == "long" || propType == "short" || propType == "byte") { }
+                // строки и инты ищутся через SearchString
+                else
+				{
+					if(summary!=null) WriteLine(summaryTemplate(2), summary);			
+                    WriteLine("        [CanBeNull] public {1} {0} {{ get; set; }}", propName, propType);
+				}
+            }
+        }
+        WriteLine();
+        
+        foreach (XElement findMethodElem in dtoElem.Elements("finderAddonFields"))
+        foreach (XElement propElem in findMethodElem.Elements("p"))
+        {
+            XAttribute attr = propElem.Attribute("canFindByNull");
+			string summary = Asummary(propElem);
+			if(string.IsNullOrWhiteSpace(summary)) summary = null;
+
+            if (attr != null && bool.Parse(attr.Value))
+                WriteLine("        public bool SearchByNull{0} {{ get; set; }}", Aname(propElem));
+			if(summary!=null) WriteLine(summaryTemplate(2), summary);			
+            WriteLine("        [CanBeNull] public {0}{2} {1} {{ get; set; }}", Atype(propElem), Aname(propElem), IsValueType(Atype(propElem))?"?":"");
+        }
+
+        WriteLine();
+		
+		// IsEmpty
+        Write(@"        public bool IsEmpty { get {  ");
+        List<string> ors = new List<string>();
+        ors.Add("return string.IsNullOrEmpty(SearchString)");
+        foreach (XElement propElem in CalcXpath(dtoElem, "p[@finder]"))
+        {
+            string propName = Aname(propElem);
+            string propType = Atype(propElem);
+            string finderType = Aval(propElem, "finder");
+            if (finderType.StartsWith("list", StringComparison.InvariantCultureIgnoreCase))
+                ors.Add(string.Format("({0}==null || {0}.Count == 0)", propName));
+            else
+            {
+                if (propType.StartsWith("DateTime") || finderType=="range")
+                {
+                    ors.Add(string.Format("{0}Begin==null", propName));
+                    ors.Add(string.Format("{0}End==null", propName));
+                }
+                else if (propType == "bool")
+                    ors.Add(string.Format("{0}==null", propName));
+                else if (propType == "string" || propType == "int" || propType == "long" || propType == "short" || propType == "byte") { }
+                // строки и инты ищутся через SearchString
+                else if (propType.StartsWith("list", StringComparison.InvariantCultureIgnoreCase))
+                    ors.Add(string.Format("({0}==null || {0}.Count == 0)", propName));
+                else
+                    ors.Add(string.Format("{0}==null", propName));
+            }
+        }
+        foreach (XElement finderAddonElems in dtoElem.Elements("finderAddonFields"))
+        foreach (XElement propElem in finderAddonElems.Elements("p"))
+        {
+            XAttribute attr = propElem.Attribute("canFindByNull");
+            
+            if (attr != null && bool.Parse(attr.Value))
+                ors.Add(string.Format("!SearchByNull{0}", Aname(propElem)));
+                
+            if (Atype(propElem).EndsWith("[]"))
+				ors.Add(string.Format("({0}==null || {0}.Length == 0)", Aname(propElem)));
+            else if (Atype(propElem).StartsWith("List"))
+                ors.Add(string.Format("({0}==null || {0}.Count == 0)", Aname(propElem)));
+            else
+                ors.Add(string.Format("{0} == default({1})", Aname(propElem),  Atype(propElem)+(IsValueType(Atype(propElem))?"?":"")));
+        }
+        Write(string.Join(" && ", ors) + ";");
+        WriteLine(@"} }"); 
+		// end IsEmpty
+		
+		WriteLine();
+		WriteLine();
+		
+		// Clone
+		WriteLine(@"        public override {0}Finder Clone()
+        {{
+            {0}Finder rv = base.Clone();", dtoName);
+        foreach (XElement propElem in CalcXpath(dtoElem, "p[@finder]"))
+		{
+            string propType = Atype(propElem);
+            if (Aval(propElem, "finder").StartsWith("list", StringComparison.InvariantCultureIgnoreCase))
+			{
+                WriteLine(@"            if (this.{0} != null)
+                rv.{0} = new List<{1}>(this.{0});", Aname(propElem), propType);
+			}
+			else if(propType.StartsWith("List"))
+                WriteLine(@"            if (this.{0} != null)
+                rv.{0} = new {1}(this.{0});", Aname(propElem), propType);
+			else if(propType.EndsWith("[]"))
+                WriteLine(@"            if (this.{0} != null)
+                rv.{0} = ({1}) this.{0}.Clone();", Aname(propElem), propType);
+		}
+        foreach (XElement findMethodElem in dtoElem.Elements("finderAddonFields"))
+        foreach (XElement propElem in findMethodElem.Elements("p"))
+        {
+            string propType = Atype(propElem);
+			if(propType.StartsWith("List"))
+                WriteLine(@"            if (this.{0} != null)
+                rv.{0} = new {1}(this.{0});", Aname(propElem), propType);
+			else if(propType.EndsWith("[]"))
+                WriteLine(@"            if (this.{0} != null)
+                rv.{0} = ({1}) this.{0}.Clone();", Aname(propElem), propType);
+		}
+		WriteLine(@"            return rv;
+        }"); 
+		// end Clone()
+		
+				
+		WriteLine();
+		WriteLine();
+		
+		// InteriorEquals
+		WriteLine(@"        protected override bool InteriorEquals({0}Finder other)
+        {{
+            return ", dtoName);
+		List<string> ands = new List<string>();
+        foreach (XElement propElem in CalcXpath(dtoElem, "p[@finder]"))
+		{
+            string propType = Atype(propElem);
+	        if (Aval(propElem, "finder").StartsWith("list", StringComparison.InvariantCultureIgnoreCase) || propType.StartsWith("List") || propType.EndsWith("[]"))
+			{
+				string elemtype = propType.StartsWith("List")? propType.Substring(5,propType.Length-4-2): propType.EndsWith("[]")? propType.Substring(0,propType.Length-2):propType;
+				string order = "x";
+				XElement dtoElemElemType;
+				if((dtoElemElemType=dtoElems.Find(xelem=>Aname(xelem)==elemtype))!=null) 
+					order = MakeIdParamsByComma("x",CalcXpath(dtoElemElemType, "p[@id]"));
+                ands.Add(string.Format(@"({0} == null || {0}.{1} == 0) && (other.{0} == null || other.{0}.{1} == 0) ||
+                              {0} != null && other.{0} != null &&
+                              {0}.{1} == other.{0}.{1} &&
+                              (from x in {0} orderby {2} select x).Distinct()
+                                .SequenceEqual((from x in other.{0} orderby {2} select x).Distinct())"
+					, Aname(propElem), propType.EndsWith("[]")? "Length" : "Count", order));
+			}
+			else if(propType.StartsWith("DateTime") || Aval(propElem, "finder")=="range")
+			{
+				ands.Add(string.Format(@"this.{0}Begin == other.{0}Begin", Aname(propElem)));
+				ands.Add(string.Format(@"this.{0}End == other.{0}End", Aname(propElem)));
+			}
+			else if(!(propType == "string" || propType == "int" || propType == "long" || propType == "short" || propType == "byte"))
+				ands.Add(string.Format(@"this.{0} == other.{0}", Aname(propElem)));
+		}		
+        foreach (XElement findMethodElem in dtoElem.Elements("finderAddonFields"))
+        foreach (XElement propElem in findMethodElem.Elements("p"))
+        {
+            string propType = Atype(propElem);
+			if(propType.StartsWith("List") || propType.EndsWith("[]"))
+			{
+				string elemtype = propType.StartsWith("List")? propType.Substring(5,propType.Length-4-2): propType.EndsWith("[]")? propType.Substring(0,propType.Length-2):propType;
+				string order = "x";
+				XElement dtoElemElemType;
+				if((dtoElemElemType=dtoElems.Find(xelem=>Aname(xelem)==elemtype))!=null) order = MakeIdParamsByComma("x",CalcXpath(dtoElemElemType, "p[@id]"));
+                ands.Add(string.Format(@"({0} == null || {0}.{1} == 0) && (other.{0} == null || other.{0}.{1} == 0) ||
+                              {0} != null && other.{0} != null &&
+                              {0}.{1} == other.{0}.{1} &&
+                              (from x in {0} orderby {2} select x).Distinct()
+                                 .SequenceEqual((from x in other.{0} orderby {2} select x).Distinct())"
+					, Aname(propElem), propType.EndsWith("[]")? "Length" : "Count", order));
+			}
+			else
+				ands.Add(string.Format(@"this.{0} == other.{0}", Aname(propElem)));
+			if(Abool(propElem, "canFindByNull"))
+				ands.Add(string.Format(@"this.SearchByNull{0} == other.SearchByNull{0}", Aname(propElem)));
+		}
+		if(ands.Count==0)
+			WriteLine("true;");
+		else
+			WriteLine("                    "+string.Join(NewLine+"                    && ", ands.Select(x=> "("+x+")"))+ ";");
+		WriteLine(@"        }"); 
+		// end InteriorEquals()
+		
+
+		
+        WriteLine(footer);
+
+        SaveOutput(dtoName + "Finder.cs");
+    } // finder classes
+
+	
+
+    // updateDTO classes
+    foreach (XElement dtoElem in dtoElems.Where(e=>Ahas(e, "updateable")))
+    {
+        string className = Aname(dtoElem) + "Updater";
+
+        List<XElement> idElems = CalcXpath(dtoElem, "p[@id]").ToList();
+
+	    WriteLine(dtoUpdateHeadTemplate, ns, className);
+		WriteLine(@"        public {0}({1})
+        {{
+{2}
+        }}"
+			, className
+			, MakeIdSignature(idElems)
+			, string.Join(NewLine,  CalcXpath(dtoElem, "p[@id]").Select(e=>string.Format("            {0} = {1};", Aname(e), Aname(e).ToLower()+"_")))
+		);
+        WriteLine();
+
+        Dictionary<string, List<KeyValuePair<string, string>>> cParams = new Dictionary<string, List<KeyValuePair<string, string>>>();
+
+        foreach (XElement propElem in CalcXpath(dtoElem, "p[@updateable]"))
+        {
+            string name = Aname(propElem);
+            string type = Atype(propElem);
+            List<string> cList = Aupdateable(propElem).Split(',').Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+            foreach (string s in cList)
+            {
+                if (cParams.ContainsKey(s))
+                    cParams[s].Add(new KeyValuePair<string, string>(name, type));
+                else
+                    cParams.Add(s, new List<KeyValuePair<string, string>>() { new KeyValuePair<string, string>(name, type) });
+            }
+        }
+
+        foreach (KeyValuePair<string, List<KeyValuePair<string, string>>> kvp in cParams)
+        {
+            WriteLine(string.Format(summaryTemplate(2), kvp.Key));
+            WriteLine(@"        public {0}({3}, {1})
+        {{
+{4}
+{2}
+        }}"
+            , className
+            , string.Join(", ", kvp.Value.Select(x => string.Format("{0} {1}", x.Value, x.Key.ToLower() + "_")))
+            , string.Join(NewLine, kvp.Value.Select(x => string.Format("            {0} = {1};", x.Key, x.Key.ToLower() + "_")))
+            , MakeIdSignature(idElems)
+            , string.Join(NewLine, CalcXpath(dtoElem, "p[@id]").Select(e => string.Format("            {0} = {1};", Aname(e), Aname(e).ToLower() + "_")))
+        );
+            WriteLine();
+        }
+
+		foreach(XElement idElem in CalcXpath(dtoElem, "p[@id]"))
+		{
+	        string idName = Aname(idElem);
+	        string idDbName = Adbname(idElem);
+	        string idType = Atype(idElem);
+
+	        string idSummary = Asummary(idElem);
+	        if (idDbName != idName) idSummary += string.Format(" dbName={0}. ", idDbName);
+	        idSummary += " PK. ";
+
+	        if (!string.IsNullOrEmpty(idSummary))
+	            idSummary = NewLine + string.Format(summaryTemplate(2), idSummary);
+
+			WriteLine(@"
+        {0}
+        public {1} {2} {{ get; private set; }}"+NewLine, idSummary, idType, idName);
+		}
+        
+        foreach (XElement propElem in CalcXpath(dtoElem, "p[@updateable]"))
+        {
+            string name = Aname(propElem);
+            string nameInner = "_" + name.Substring(0, 1).ToLower() + name.Substring(1);
+            string type = Atype(propElem);
+
+            string nullableS = Aval(propElem, "nullable");
+            bool nullable = nullableS == null ? false : bool.Parse(nullableS);
+
+			string realType = type + (IsValueType(type)&&nullable ?"?":"");
+
+			if (nullableS != null)
+                WriteLine("        " + (nullable ? "[CanBeNull]" : "[NotNull]"));
+            WriteLine(@"        {0} {1};", realType, nameInner);
+
+            string propSummary = Asummary(propElem);
+            string dbName = Adbname(propElem);
+
+            if (dbName != name) propSummary += string.Format(" dbName={0}. ", dbName);
+
+            if (!string.IsNullOrEmpty(propSummary))
+                WriteLine(summaryTemplate(2), propSummary);
+
+            if (nullableS != null)
+                WriteLine("        " + (nullable ? "[CanBeNull]" : "[NotNull]"));
+            WriteLine(@"        public {0} {1} {{ get {{ return {2}; }} set {{ {4}Changed[""{3}""] = {2} = value; }} }}",
+                realType, name, nameInner, dbName,
+                nullableS != null && !nullable ? string.Format(NewLine + @"                if (value == null)
+                    throw new ArgumentNullException(""{0}"");" + NewLine + "                ", name) : "");
+
+            WriteLine();
+            WriteLine();
+        }
+        
+        
+
+		WriteLine(@"        /// <summary>
+        ///     Returns IsEmpty value after operation
+        /// </summary>
+        public bool ExcludeEquals([NotNull] {0} x)
+        {{", Aname(dtoElem));
+	
+		foreach (XElement propElem in CalcXpath(dtoElem, "p[@updateable]"))
+        {	
+            string name = Aname(propElem);
+            string nameInner = "_" + name.Substring(0, 1).ToLower() + name.Substring(1);
+            string dbName = Adbname(propElem);
+
+			WriteLine(@"            if (Changed.ContainsKey(""{2}"") && {0} == x.{1})
+                Changed.Remove(""{2}"");", nameInner, name, dbName);
+		}
+		
+		WriteLine(@"            return this.IsEmpty;
+        }");
+		
+        WriteLine(footer);
+
+        SaveOutput(className + ".cs");
+    }	
+
+	
+    // methods - Db.Generated.cs
+    WriteLine(readMethodsHeadTemplate, ns, connectionStringName);
+
+    foreach (XElement dtoElem in dtoElems)
+    {
+        string dtoName = dtoElem.Attribute("name").Value;
+
+        List<XElement> idElems = CalcXpath(dtoElem, "p[@id]").ToList();
+
+        WriteLine(@"        #region {0} methods", dtoName);
+        // base read method
+        WriteLine(@"        [NotNull]
+        static {0} Read{0}([NotNull] IDataRecord r)
+        {{
+            {0} x = new {0}();", dtoName);
+
+        foreach (XElement propElem in dtoElem.Elements("p"))
+            if (propElem.Attribute("notfromdb") == null)
+            {
+                string propName = Aname(propElem);
+                string propType = Atype(propElem);
+                string nullableS = Aval(propElem, "nullable");
+                bool nullable = nullableS == null ? false : bool.Parse(nullableS);
+                string dbName = Adbname(propElem);
+
+                if (propType.EndsWith("?")||IsValueType(propType)&&nullable)
+                    WriteLine(@"            x.{0} = GetNullableVal<{1}>(r[""{2}""]);", propName,propType.EndsWith("?")? propType.TrimEnd('?'):propType, dbName);
+                else
+                {
+                    if (!nullable)
+                        WriteLine(@"            x.{0} = ({1}) r[""{2}""];", propName, propType, dbName);
+                    else
+                        WriteLine(@"            x.{0} = GetNullableRef<{1}>(r[""{2}""]);", propName, propType.TrimEnd('?'), dbName);
+                }
+
+                string addonprocessfunction;
+                if (!string.IsNullOrWhiteSpace(addonprocessfunction = Aval(propElem, "addonprocessfunction")))
+                {
+                    WriteLine(@"            Func<{2}, {2}> f{0} = {1};", propName, addonprocessfunction, propType);
+                    WriteLine(@"            x.{0} = f{0}(x.{0});", propName, addonprocessfunction, propType);
+                }
+            }
+
+        WriteLine(@"            return x;
+        }");
+
+        WriteLine(@"        [NotNull]
+        static List<{0}> Read{0}List([NotNull] IDataReader r)
+        {{
+            List<{0}> l = new List<{0}>();
+            while (r.Read())
+                l.Add(Read{0}(r));
+            return l;
+        }}", dtoName);
+
+        WriteLine(@"        [CanBeNull]
+        static {0} Exec{0}One([NotNull] SqlCommand com)
+        {{
+            {0} rv = null;
+            using (SqlDataReader r = com.ExecuteReader())
+                if (r.Read())
+                    rv = Read{0}(r);
+            return rv;
+        }}", dtoName);
+
+        WriteLine(@"        [NotNull]
+        static List<{0}> Exec{0}List([NotNull] SqlCommand com)
+        {{
+            using (SqlDataReader r = com.ExecuteReader())
+                return Read{0}List(r);
+        }}", dtoName);
+
+
+        string tableName = "FAKE", tableAlias = "FAKE";
+        bool multyTabled = false;
+        string[] tables = null;
+
+			
+        // multitabled support
+        if (Ahas(dtoElem, "tableName"))
+        {
+        	Regex r = new Regex(@"^(?<TABLE>\w+)(\s+(?<ALIAS>\w+))?", RegexOptions.IgnoreCase);
+            string tableVal = Aval(dtoElem, "tableName");
+            tables = tableVal.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToArray();
+            if (tables.Length == 1)
+            {
+                Match m = r.Match(tables[0]);
+                tableName = m.Groups["TABLE"].Success ? m.Groups["TABLE"].Captures[0].Value : null;
+                tableAlias = m.Groups["ALIAS"].Success ? m.Groups["ALIAS"].Captures[0].Value : null;
+				if(idElems.Count>0)
+                	WriteLine(@"        static KeyValuePair<string, object>[] Get{0}TableIdValues({2})
+        {{ return new[] {{ {1} }}; }}"
+						, dtoName
+						, string.Join(", ", idElems.Select(e=>string.Format(@"new KeyValuePair<string, object>(""{0}"", {1})", Adbname(e), IdParName(e))))
+						, MakeIdSignature(idElems)
+					);
+
+            }
+            else
+            {
+                multyTabled = true;
+				// table name=> alias
+				Dictionary<string, string> tablesDict = tables.ToDictionary(ts => r.Match(ts).Groups["TABLE"].Captures[0].Value, ts=>r.Match(ts).Groups["ALIAS"].Captures[0].Value);			
+                tables = tablesDict.Select(kvp => kvp.Key).ToArray();
+
+                WriteLine(@"        public enum {0}Table
+        {{
+            {1}
+        }}"
+					, dtoName
+					, string.Join(", ", tablesDict.Keys)
+				);
+
+                WriteLine(@"        static string Get{0}Table({0}Table e)
+        {{
+            switch(e)
+            {{
+{1}
+                default: throw new Exception(string.Format(""{0}Table [{{0}}] is not supported"", e));
+            }}
+        }}"
+					, dtoName
+					, string.Join(NewLine, tablesDict.Select(kvp => string.Format(@"                case {0}Table.{1} : return ""{1}"";"
+						, dtoName
+						, kvp.Key)))
+                );
+
+				// id => idDbName[]
+                Dictionary<XElement, string[]> ids = idElems.ToDictionary(e=>e, e=>e.Attribute("id").Value.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToArray());
+				
+				WriteLine(@"        static string Get{0}TablePKWhereClause({0}Table t)
+        {{
+            switch(t)
+            {{
+{1}
+                default: throw new Exception(string.Format(""{0}TableId [{{0}}] is not supported"", t));
+            }}
+        }}"
+					, dtoName
+					, string.Join(NewLine, tablesDict.Select((kvp,i)=>string.Format(@"                case {0}Table.{1} : return ""{2}"";"
+						, dtoName
+						, kvp.Key
+						, string.Join(", ", ids.Select(x=>string.Format(@"{0}=@{1}", x.Value[i], Aname(x.Key)))) )))
+				);
+				
+                WriteLine(@"        static KeyValuePair<string, object>[] Get{0}TableIdValues({0}Table e, {2})
+        {{
+            switch(e)
+            {{
+{1}
+                default: throw new Exception(string.Format(""{0}TableId [{{0}}] is not supported"", e));
+            }}
+        }}"
+					, dtoName
+					, string.Join(NewLine, tablesDict.Select(
+	                        (kvp,i) => string.Format(@"                case {0}Table.{1} :  return new[] {{ "
+							+ string.Join(", ", ids.Select(x=>string.Format(@" new KeyValuePair<string, object>(""{0}"", {1}) ", x.Value[i], IdParName(x.Key))))
+							+ @"}}; ", 
+						dtoName, kvp.Key)))
+					, MakeIdSignature(idElems)					
+                );
+
+            }
+        } // multytabled support
+
+
+        // FindById method
+        string genById = Aval(dtoElem, "generateFindByIdMethod");
+        if (genById != null)
+        {
+            WriteLine(@"        [CanBeNull]
+        public {0} Find{0}ById({4})
+        {{
+            using (SqlConnection con = new SqlConnection(ConnectionString))
+            using (SqlCommand com = PrepareCommand(con))
+            {{
+                com.CommandText = {3};
+{1}
+
+                return Exec{0}{2}One(com);
+            }}
+        }}"
+				, dtoName
+				, MakeIdAddSqlParams(idElems)
+				, genById == "custom" ? "Custom" : ""
+				, genById == "custom" ? string.Format(@"string.Format(Find{0}SelectTemplate, @"" {1} "")", dtoName
+					, MakeIdWhereClause(idElems, tableAlias))
+	                : string.Format(@" "" select * from {0} {1} where {2} "" "
+						, EnsureInBraces(tableName)
+						, tableAlias
+						, MakeIdWhereClause(idElems, tableAlias))
+				, MakeIdSignature(idElems)
+			);
+        } // FindById method
+
+ 
+         // update method
+        if (Ahas(dtoElem, "updateable"))
+        {
+            bool isVoid = Aval(dtoElem, "updateable") == "void";
+
+			string pkCompare = string.Join(" && ", idElems.Select(e=>string.Format("xu.{0} == default({1})", Aname(e), Atype(e))));
+			
+            WriteLine((isVoid ? "" : @"        [NotNull]
+") + @"        public " + (isVoid ? "void" : @"{0}") + @" Update([NotNull] {0}Updater xu{4}" + (multyTabled ? ", {0}Table table" : "") + @")
+        {{
+            if ("+pkCompare+@")
+                throw new Exception(""Update {0}: pk in {0}Updater object is not initialized"");
+
+            " + (isVoid ? "" : "{0} x = ") 
+			+ @"Update(xu, ""dbo." + (multyTabled ? "\"+ Get{0}Table(table)" : "{2}\"") 
+			+ @", Get{0}TableIdValues(" + (multyTabled ? "table," : "") + @" {5})" 
+			+ (isVoid ? "" : @", Read{0}") + @");
+" + (isVoid ? "            UpdateAddon(xu);"+NewLine : @"
+            if (x == null)
+                throw new Exception(""Update {0} returns empty - no such PK""); // can not be in reality
+            {3}
+") + @"        }}
+        partial void UpdateAddon([NotNull]{0}Updater xu);"
+				, dtoName
+				, null
+				, EnsureInBraces(tableName)
+				, genById != "custom" ? "UpdateAddon(xu); return x;"
+                    : string.Format(@"{0} rv = needCustomSelect ? {1} : x;
+            UpdateAddon(xu);
+            return rv;"				, dtoName				, MakeFindByIdExec(dtoName, "x", idElems) )
+				, genById != "custom" ? "" : isVoid? "":", bool needCustomSelect = true" // 4
+				, MakeCallByIdParams("xu", idElems)
+            );
+
+			pkCompare = string.Join(" && ", idElems.Select(e=>string.Format("u.{0} == default({1})", Aname(e), Atype(e))));
+
+            WriteLine((isVoid ? "" : @"        [NotNull]
+") + @"        public " + (isVoid ? "void" : @"List<{0}>") + @" Update([NotNull] IEnumerable<{0}Updater> xu{4}" + (multyTabled ? ", {0}Table table" : "") + @")
+        {{
+            List<UpdateBase> uArr = new List<UpdateBase>();
+            List<IEnumerable<KeyValuePair<string, object>>> pkFiltersArr = new List<IEnumerable<KeyValuePair<string, object>>>();
+            foreach ({0}Updater u in xu)
+            {{
+                if ("+pkCompare+@")
+                    throw new Exception(""Update {0}: {1} in {0}Updater object is not initialized"");
+                uArr.Add(u);
+                pkFiltersArr.Add(Get{0}TableIdValues(" + (multyTabled ? "table, " : "") + @"{1}));
+            }}
+            " + (isVoid ? "" : "List<{0}> x = ") + @"Update(uArr, ""dbo." + (multyTabled ? "\"+ Get{0}Table(table)" : "{2}\"") + @", pkFiltersArr" + (isVoid ? "" : @", Read{0}") + @");
+" + (isVoid ? ("            foreach (" + dtoName + "Updater xui in xu) UpdateAddon(xui);"+NewLine) : @"
+            if (x == null)
+                throw new Exception(""Update {0} returns empty - no such PK""); // can not be in reality
+            {3}
+") + @"        }}"
+				, dtoName
+				, MakeCallByIdParams("u", idElems)
+				, EnsureInBraces(tableName)
+				, genById != "custom" ? ("foreach (" + dtoName + "Updater xui in xu) UpdateAddon(xui); return x;")
+                    : string.Format(@"List<{0}> rv = needCustomSelect ? x.Select(t => {1}).ToList() : x;
+            foreach ({0}Updater xui in xu) UpdateAddon(xui);
+            return rv;", dtoName, MakeFindByIdExec(dtoName, "t", idElems) )
+				, genById != "custom" ? "" : isVoid? "": ", bool needCustomSelect = true" // 4
+            );
+
+        } // update method
+
+
+        // GetAll method
+        string genAll = Aval(dtoElem, "generateGetAllMethod");
+        if (genAll != null)
+        {
+            Regex r = new Regex(@"^\s*(order\s*by\s+(?<ORDERBY>.+))?", RegexOptions.IgnoreCase);
+            Match m = r.Match(genAll);
+            string orderbyClause = m.Groups["ORDERBY"].Success ? m.Groups["ORDERBY"].Captures[0].Value : null;
+
+            WriteLine(@"        [NotNull]
+        public List<{0}> GetAll{0}({4})
+        {{
+            using (SqlConnection con = new SqlConnection(ConnectionString))
+            using (SqlCommand com = PrepareCommand(con))
+            {{
+                com.CommandText = @""select * from dbo.{1} {2}"";
+
+                List<{0}> rv = Exec{0}List(com);
+{3}
+                return rv;
+            }}
+        }}", dtoName 
+			,EnsureInBraces(tableName)
+			,string.IsNullOrEmpty(orderbyClause) ? "" : (" order by " + orderbyClause)
+            ,genById == "custom" ? string.Format(@"                if (selectCustom)
+                    rv = rv.Select(x=>Find{0}ById({1})).ToList();", dtoName, string.Join(", ", idElems.Select(e=>string.Format("{0}:x.{1}", Aname(e).ToLower()+"_",Aname(e)))))
+                        : ""
+            ,genById == "custom" ? "bool selectCustom = false" : "");
+        } // GetAll method
+
+
+        // find methods
+        foreach (XElement findMethodElem in dtoElem.Elements("findMethod"))
+        {
+            bool custom = Ahas(findMethodElem, "custom");
+            string nameAddon = Aval(findMethodElem, "nameAddon");
+            string returnType = Aval(findMethodElem, "return") ?? "list";
+			string order = Aval(findMethodElem, "orderby");
+			
+			string summary = Asummary(findMethodElem);
+			if(!string.IsNullOrEmpty(summary))
+				WriteLine(summaryTemplate(2), summary);
+
+            Write(@"        [{3}]
+        public {0} Find{1}{2}(", returnType == "list" ? "List<" + dtoName + ">" : dtoName
+				, dtoName, nameAddon, returnType == "list" ? "NotNull" : "CanBeNull");
+
+            List<XElement> parFromDtoElems = findMethodElem.Elements("p")
+							.Where(e => CalcXpath(dtoElem, string.Format("p[@name='{0}']", Aname(e))).Any())
+                            .Select(e => CalcXpath(dtoElem, string.Format("p[@name='{0}']", Aname(e))).First())
+                            .ToList();
+			XElement sqlElem = findMethodElem.Element("sql");
+            List<XElement> parAddonElems = sqlElem==null? new List<XElement>(): findMethodElem.Elements("p")
+							.Where(e => !CalcXpath(dtoElem, string.Format("p[@name='{0}']", e.Attribute("name").Value)).Any())
+                            .ToList();
+
+			//[NotNull] string login, [NotNull] string hash
+            Write(string.Join(", ", parFromDtoElems.Select(e => string.Format("{0}{1} {2}",
+		                !Ahas(e, "nullable") ? "" : bool.Parse(Aval(e, "nullable")) ? "[CanBeNull] " : "[NotNull] ",
+		                Atype(e),
+		                Aname(e).ToLower()
+					)).Concat(parAddonElems.Select(e => string.Format("{0} {1}", Atype(e), Aname(e)) ))
+				)
+			);
+
+            List<KeyValuePair<string, string>> dbNames = parFromDtoElems
+                            .Select(e => new KeyValuePair<string, string>(Adbname(e), Atype(e))).ToList();
+
+			string commandType = "Text";
+			if(sqlElem!=null)
+				commandType = string.Compare(Atype(sqlElem), "Procedure", true)==0? "StoredProcedure":"Text";
+			
+            WriteLine(@")
+        {{
+            using (SqlConnection con = new SqlConnection(ConnectionString))
+            using (SqlCommand com = PrepareCommand(con, ct:CommandType.{1}))
+            {{
+                com.CommandText = {0};"
+					, sqlElem == null?
+						(
+						custom && returnType == "one"
+	                        ? string.Format(@"string.Format(Find{0}SelectTemplate, @""{1}"")", dtoName,
+	                            string.Join(" and ", dbNames.Select(kvp => string.Format(IsNullable(kvp.Value) ? "({1}.[{0}] is null and @{0} is null or {1}.[{0}] = @{0})" : "{1}.[{0}] = @{0}", kvp.Key, tableAlias)).ToArray()))
+	                        : string.Format(@" ""select * from dbo.{0} where {1} {2} """, EnsureInBraces(tableName),
+	                            string.Join(" and ", dbNames.Select(kvp => string.Format(IsNullable(kvp.Value) ? "([{0}] is null and @{0} is null or [{0}] = @{0})" : "[{0}] = @{0}", kvp.Key)).ToArray()),
+								string.IsNullOrWhiteSpace(order)? null: ("order by " + order)
+	                        )
+						)
+						: string.Compare(Atype(sqlElem), "WhereClause", true)==0? string.Format(@"@"" select {1}.* from {0} {1} where {2} """, tableName, tableAlias, sqlElem.Value.Trim())
+						: string.Format(@"@""{0}""", sqlElem.Value.Trim())
+					, commandType
+            );
+
+            foreach (XElement parElem in parFromDtoElems)
+                WriteLine(@"                com.Parameters.AddWithValue(""{0}"", {1});", Adbname(parElem),
+                    string.Format(IsNullable(Atype(parElem)) ? "GetNullableParamVal({0})" : "{0}", Aname(parElem).ToLower()));
+			foreach(XElement parElem in parAddonElems)
+				WriteLine(@"                com.Parameters.AddWithValue(""{0}"", GetNullableParamVal((object){1}));"
+					, Aval(parElem, "sqlName") ?? Aname(parElem)
+					, Aname(parElem));
+
+            WriteLine();
+            if (returnType == "one")
+                WriteLine(@"                return Exec{0}{1}One(com);", dtoName, custom ? "Custom" : "");
+            else
+            {
+                WriteLine(@"                List<{0}> l = Exec{0}List(com);", dtoName);
+                if (custom)
+                    WriteLine(@"                return l.Select(x => {1}).ToList();", dtoName, MakeFindByIdExec(dtoName, "x", idElems));
+                else
+                    WriteLine("                return l;");
+            }
+
+            WriteLine(@"            }
+        }");
+        } // find methods
+
+
+        // finder method
+        if (Ahas(dtoElem, "generateFinder"))
+        {
+			string whereClauseForSearchString = string.Join(" or ", CalcXpath(dtoElem, "p[@finder and @finder!='list' and @type='string']")
+					.Select(e => string.Format("{0}.{1} like @like", tableAlias, Adbname(e)))
+                    .Union(
+                        CalcXpath(dtoElem, "p[@finder and @finder!='list' and @finder!='liststandart' and (@type='int' or @type='long' or @type='short' or @type='byte')]").Select(e => string.Format("@intProposal is not null and {0}.{1}=@intProposal", tableAlias, Adbname(e)))
+                    ));
+			
+            WriteLine(@"        static string GetWhereClause([CanBeNull]{0}Finder f, [NotNull] SqlCommand com)
+        {{
+            if (f == null || f.IsEmpty) return null;
+            if (f.SearchString != null && (f.SearchString = f.SearchString.Trim()) == """") f.SearchString = null;
+
+            List<string> wheres = new List<string>();
+            if (!string.IsNullOrEmpty(f.SearchString))
+            {{
+                List<string> ors = new List<string>();"+(whereClauseForSearchString==""? "" : @"
+                ors.Add(@"" {1} "" ); ") + @"                
+                GetWhereClauseOrsAddon(f, ors, com);
+                string orsS = ors == null ? null : string.Join("" or "", ors.Select(x=>""(""+x+"")""));
+                if(!string.IsNullOrEmpty(orsS))
+                {{
+                    wheres.Add(orsS);
+                    com.Parameters.AddWithValue(""like"", f.SearchString == null ? (object) DBNull.Value : ""%"" + f.SearchString + ""%"");
+                    int idProp;
+                    com.Parameters.AddWithValue(""intProposal"", f.SearchString == null || !int.TryParse(f.SearchString, out idProp) ? DBNull.Value : (object) idProp);
+                }}
+            }}
+{2}
+{3}
+
+{4}
+            GetWhereClauseAddon(f, wheres, com);
+
+            string whereClause = null;
+            if (wheres.Count > 0)
+                whereClause = "" where "" + string.Join("" and "", wheres.Select(w=> ""(""+w+"")""));
+            return whereClause;
+        }}
+        static partial void GetWhereClauseOrsAddon([NotNull] {0}Finder f, [NotNull]List<string> ors, [NotNull]SqlCommand com);
+        static partial void GetWhereClauseAddon([NotNull] {0}Finder f, [NotNull]List<string> wheres, [NotNull]SqlCommand com);", 
+				dtoName,
+				whereClauseForSearchString,
+                // sql parameters
+                string.Join(NewLine,
+                    CalcXpath(dtoElem, "p[@finder and @finder!='range' and @finder!='list' and @finder!='liststandart' and @type='bool']")
+					.Select(e => string.Format(@"            if (f.{2}.HasValue) wheres.Add("" {0}.{1}=@{2} "");", tableAlias, Adbname(e), Aname(e)))
+                    .Union(
+                        CalcXpath(dtoElem, "p[@finder and (@finder='range' or @finder='' and (@type='DateTime' or @type='DateTime?'))]")
+						.Select(e =>
+                            string.Format(@"            if (f.{2}Begin.HasValue) wheres.Add(@"" {0}.{1}>= @{2}Begin "");
+            if (f.{2}End.HasValue) wheres.Add(@"" {0}.{1}<= @{2}End "");", tableAlias, EnsureInBraces(Adbname(e)), Aname(e))
+                        )
+                    )
+                ),
+				// where list
+                string.Join(NewLine,
+                    CalcXpath(dtoElem, "p[@finder='liststandart']")
+					.Select(e => string.Format(Abool(e, "nullable") || Atype(e).EndsWith("?") ?
+				@"            if (f.{0} != null && f.{0}.Count > 0)
+                wheres.Add( (f.{0}.Any(x=>x!=null) ? string.Format("" {1}.{2} in ({{0}}) "", string.Join("","", f.{0}{3}.Where(x=>x!=null) )) :"""" )+ (f.{0}.Any(x => x == null)? (f.{0}.Any(x=>x!=null)?"" or "":"""") + "" {1}.{2} is null "":""""  ));"
+				:
+				@"            if (f.{0} != null && f.{0}.Count > 0)
+                wheres.Add(string.Format("" {1}.{2} in ({{0}}) "", string.Join("","", f.{0}{3}) ));"
+						, Aname(e), tableAlias, EnsureInBraces(Adbname(e)), Atype(e)=="string"? @".Select(x=>""N'"" + x + ""'"")":"" ))
+                ),
+                string.Join(NewLine,
+                    CalcXpath(dtoElem, "p[@finder and @type='bool']").Select(e =>
+                        string.Format(@"            com.Parameters.AddWithValue(""{0}"", GetNullableParamVal(f.{0}));", Aname(e)))
+                    .Union(
+                        CalcXpath(dtoElem, "p[@finder and (@finder='range' or @finder='' and (@type='DateTime' or @type='DateTime?'))]").Select(e =>
+                            string.Format(@"            com.Parameters.AddWithValue(""{0}Begin"", GetNullableParamVal(f.{0}Begin));
+            com.Parameters.AddWithValue(""{0}End"", GetNullableParamVal(f.{0}End));"
+                                , Aname(e)))
+                    )
+                )
+            );
+
+
+            WriteLine(@"        /// <summary>
+        ///     For gridviews with paging
+        /// </summary>
+        public int Find{0}Count([CanBeNull] {0}Finder f)
+        {{
+            using (SqlConnection con = new SqlConnection(ConnectionString))
+            using (SqlCommand com = PrepareCommand(con))
+            {{
+                string whereClause = GetWhereClause(f, com);
+                com.CommandText = @"" select cast( count(*) as int) from dbo.{1} {2} "" + whereClause;
+
+                int count = (int) com.ExecuteScalar();
+                return count;
+            }}
+        }}", dtoName, EnsureInBraces(tableName), tableAlias
+            );
+
+            WriteLine(@"        [NotNull]
+        public List<{0}> Find{0}s([CanBeNull] {0}Finder f, string orderBy = null, int startIndex = 0, int count = int.MaxValue{6})
+        {{
+            if (string.IsNullOrEmpty(orderBy)) orderBy = ""{1}"";
+
+            using (SqlConnection con = new SqlConnection(ConnectionString))
+            using (SqlCommand com = PrepareCommand(con))
+            {{
+                string whereClause = GetWhereClause(f, com);
+                if(f==null) f = new {0}Finder();
+                com.CommandText = string.Format(startIndex == 0 && count == int.MaxValue
+                                                        ? @"" select {3}.* from dbo.{2} {3} {{1}} order by {{0}} ""
+                                                        : @"" select * from (
+                                                                select {3}.*, row_number() over(order by {{0}}) r from dbo.{2} {3} 
+                                                                 {{1}}
+                                                            ) t where r >= @startIndex and r < @startIndex + @count
+                                                            order by {{0}}"", orderBy, whereClause);
+
+                com.Parameters.AddWithValue(""startIndex"", startIndex + 1);
+                com.Parameters.AddWithValue(""count"", count);
+
+                List<{0}> rv = Exec{0}List(com);
+{5}
+                return rv;
+            }}
+        }}", 
+				dtoName
+				, EnsureInBraces(idElems, Adbname)
+				, EnsureInBraces(tableName)
+				, tableAlias
+				, null
+                , Aval(dtoElem, "generateFindByIdMethod") == "custom"
+                    ? string.Format(@"                if(needCustomSelect) rv = rv.Select(x => {1}).ToList();", dtoName, MakeFindByIdExec(dtoName,"x", idElems))
+                    : "",
+                Aval(dtoElem, "generateFindByIdMethod") == "custom"
+                    ? ", bool needCustomSelect = false" : ""
+            );
+
+        } // finder method
+		
+		// Find<>PageIndex method
+		if(idElems!=null && idElems.Count>0
+			&& !string.IsNullOrEmpty(tableAlias) && !string.IsNullOrEmpty(tableName))
+		{
+			bool finder = Ahas(dtoElem, "generateFinder");
+			WriteLine(@"        public int? Find{0}PageIndex({1}int pageSize, {3}, string orderBy = null)
+        {{
+            if (string.IsNullOrEmpty(orderBy)) orderBy = ""{2}"";
+            using (SqlConnection con = new SqlConnection(ConnectionString))
+            using (SqlCommand com = PrepareCommand(con))
+            {{"
+				, dtoName
+				, finder? ("[CanBeNull] " + dtoName + "Finder f, "):""
+				, EnsureInBraces(idElems, Adbname)
+				, MakeIdSignature(idElems)
+			);
+		
+			if(finder)
+				WriteLine(@"                string whereClause = GetWhereClause(f, com);
+                if (f == null) f = new {0}Finder();", dtoName);
+		
+			WriteLine(@"                com.CommandText = string.Format(@""select r/@pageSize from (
+                    select *, cast(row_number() over(order by {{0}}) as int) r
+                    from dbo.{1} {2}"+(finder?@"
+                     {{1}}":"")+@"
+                    )t where {4}"", orderBy"+(finder?@", whereClause":"")+@");
+
+{3}
+                
+                com.Parameters.AddWithValue(""pageSize"", pageSize);"
+				, dtoElem
+				, EnsureInBraces(tableName)
+				, tableAlias
+				, MakeIdAddSqlParams(idElems)
+				, MakeIdWhereClause(idElems, "t")			
+			);
+		
+			WriteLine(@"                object o = com.ExecuteScalar();
+                return o==null? (int?)null: (int?)(int)o;
+            }
+        }");
+		} // Find<>PageIndex method
+
+        // insert method
+        if (Ahas(dtoElem, "insertable"))
+        {
+            bool isVoid = Aval(dtoElem, "insertable") == "void";
+            List<XElement> props = CalcXpath(dtoElem, "p[@insertable]").Where(e => !Ahas(e, "notfromdb")).ToList();
+
+            bool customSelect = Aval(dtoElem, "generateFindByIdMethod") == "custom";
+
+			int j=0;
+            WriteLine((isVoid ? "" : @"        [NotNull]
+") + @"        public " + (isVoid ? "void" : @"{0}") + @" Insert([NotNull] {0} x{5}" + (multyTabled ? ", {0}Table table" : "") + @")
+        {{
+            using (SqlConnection con = new SqlConnection(ConnectionString))
+            using (SqlCommand com = PrepareCommand(con))
+            {{
+                com.CommandText = " + (multyTabled ? "string.Format(" : "") + (isVoid?"@\"":@"@""declare @id as table ("
+			+ string.Join(", ", idElems.Select(e=> string.Format("{0} {1}", EnsureInBraces(Aname(e)), GetSqlType(Atype(e))) ))
+			+ "); ")+@"insert into dbo." + (multyTabled ? "{{0}}" : "{1}") + @"
+                                ({2}) 
+                               " 
+			+ (isVoid ? "" : @"output "+ string.Join(", ", idElems.Select(e=>string.Format("inserted.{0}", EnsureInBraces(Adbname(e))))) +" into @id") 
+			+ @" values
+                                ({3})"
+			+(isVoid? "": @";select t.* from dbo." + (multyTabled ? "{{0}}" : "{1}") + @" t join @id i on "
+				+ MakeIdWhereClause(idElems, "t", "i")
+			)
+			+ @"  """ 
+			+ (multyTabled ? ", Get{0}Table(table))" : "") 
+			+ @";
+                  
+{4}
+                " + (isVoid ? "com.ExecuteNonQuery()" : @"{0} ins = Exec{0}One(com)") + @";"
+				, 
+				dtoName, 
+				EnsureInBraces(tableName),
+            	string.Join(", ", props.Select(p => string.IsNullOrEmpty(Aval(p, "insertable")) ?
+                        EnsureInBraces(Adbname(p))
+                        : (
+                            "\" +( " +
+                        //" table=={0}Table.{1}? \"{1}\" : "
+                            string.Join("",
+                                Aval(p, "insertable").Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim())
+                                    .Select(iname => string.Format(" table=={0}Table.{1}? \"{2}\" : ", dtoName, tables[j++], iname))
+                            )
+                            + "\"no_such_table\" )+ @\""
+                        )
+                        ).ToArray()
+                    ),
+            	string.Join(", ", props.Select(p => "@" + Aname(p)).ToArray()),
+            	string.Join("", props.Select(p => new { Name = Aname(p), nullable = IsNullable(p) })
+                        .Select(o => string.Format(@"                com.Parameters.AddWithValue(""{0}"", {1});"+NewLine, o.Name,
+                            string.Format(o.nullable ? @"GetNullableParamVal(x.{0})" : "x.{0}", o.Name)
+                        )).ToArray()),
+                    customSelect ? ", bool needCustomSelect = false" : ""
+            );
+
+            if (!isVoid)
+                if (customSelect)
+                    WriteLine(@"                {0} rv = needCustomSelect ? {1} : ins;
+                InsertAddon(rv);
+                return rv;", dtoName, MakeFindByIdExec(dtoName, "ins", idElems));
+                else
+                    WriteLine(@"                InsertAddon(ins);
+                return ins;");
+
+            WriteLine(@"            }}
+        }}
+        partial void InsertAddon([NotNull]{0} t);
+", dtoName);
+
+
+            j = 0;
+            WriteLine((isVoid ? "" : @"        [NotNull]
+") + @"        public " + (isVoid ? "void" : @"List<{0}>") + @" Insert([NotNull] IEnumerable<{0}> x{5}" + (multyTabled ? ", {0}Table table" : "") + @")
+        {{
+            using(SqlConnection con = new SqlConnection(ConnectionString))
+            using (SqlCommand com = PrepareCommand(con))
+            {{
+                StringBuilder sb = new StringBuilder();
+                sb.Append(" + (multyTabled ? "string.Format(" : "") + @"@""insert into dbo." + (multyTabled ? "{{0}}" : "{1}") + @"
+                            ({2}) 
+                            " + (isVoid ? "" : @"output inserted.*") + (multyTabled ? "\", Get{0}Table(table))" : "\"") + @");
+                int counter = 0;
+                foreach ({0} xi in x)
+                {{
+                    sb.Append(string.Format(@"" select {3}
+                              union all"", counter));
+{4}
+                    counter++;
+                }}
+                if(counter == 0)
+                    return"+ (isVoid ? ";": " new List<{0}>();") + @"
+                sb.Remove(sb.Length - 9, 9);
+                com.CommandText = sb.ToString();
+                  
+                " + (isVoid ? "com.ExecuteNonQuery()" : @"List<{0}> ins = Exec{0}List(com)") + @";", 
+					dtoName, 
+					EnsureInBraces(tableName),
+                    string.Join(", ", props.Select(p => string.IsNullOrEmpty(Aval(p, "insertable")) ?
+                        EnsureInBraces(Adbname(p))
+                        : (
+                            "\" +( " +
+                        //" table=={0}Table.{1}? \"{1}\" : "
+                            string.Join("",
+                                Aval(p, "insertable").Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim())
+                                    .Select(iname => string.Format(" table=={0}Table.{1}? \"{2}\" : ", dtoName, tables[j++], iname))
+                            )
+                            + "\"no_such_table\" )+ @\""
+                        )
+                        ).ToArray()
+                    ),
+                    string.Join(", ", props.Select(p => "@" + Aname(p) + "{0}").ToArray()),
+                    string.Join("", props.Select(p => new { Name = Aname(p), nullable = Atype(p).EndsWith("?") || Ahas(p, "nullable") && bool.Parse(Aval(p, "nullable")) })
+                        .Select(o => string.Format(@"                    com.Parameters.AddWithValue(string.Format(""{0}"", counter), {1});
+", o.Name + @"{0}",
+                            string.Format(o.nullable ? @"GetNullableParamVal(xi.{0})" : "xi.{0}", o.Name)
+                        )).ToArray()),
+                    customSelect ? ", bool needCustomSelect = false" : ""
+            );
+
+            if (!isVoid)
+                if (customSelect)
+                    WriteLine(@"                List<{0}> rv =  needCustomSelect ? ins.Select(t =>{1}).ToList() : ins;
+                rv.ForEach(xx=>InsertAddon(xx));
+                return rv;", dtoName, MakeFindByIdExec(dtoName, "t", idElems));
+                else
+                    WriteLine(@"                ins.ForEach(xx=>InsertAddon(xx));
+                return ins;");
+
+            WriteLine(@"            }
+        }");
+        } // insert method
+
+
+        // deleteById method
+        string delete = Aval(dtoElem, "deleteableById");
+        if (delete != null)
+        {
+            WriteLine(@"        public int Delete{0}("+ MakeIdSignature(idElems) + (multyTabled ? @", {0}Table t" : "") + @", int userDeleterId)
+        {{
+            Delete{0}Addon(userDeleterId, {4});
+            using(SqlConnection con = new SqlConnection(ConnectionString))
+            using(SqlCommand com = PrepareCommand(con))
+            {{
+                com.CommandText = " + (multyTabled ? @"string.Format(@""delete from dbo.{{0}} where {{1}}"", Get{0}Table(t), Get{0}TablePKWhereClause(t) )" : "\"delete from t from dbo.{1} t where {2}\"") + @";
+{5}
+                return com.ExecuteNonQuery();
+            }}
+        }}
+        partial void Delete{0}Addon(int userDeleterId, {3});"
+				, dtoName
+				, EnsureInBraces(tableName)
+				, MakeIdWhereClause(idElems, "t")
+				, MakeIdSignature(idElems)
+				, string.Join(", ", idElems.Select(e=>string.Format("{0}:{0}", IdParName(e))))
+				, MakeIdAddSqlParams(idElems)
+			);
+        } // deleteById method
+
+		// delete methods
+        foreach(XElement delMethodElem in dtoElem.Elements("deleteMethod"))
+		{
+			string summary = Asummary(delMethodElem);
+			if(!string.IsNullOrEmpty(summary))
+				WriteLine(summaryTemplate(2), summary);
+			
+			XElement sqlElem = delMethodElem.Element("sql");
+			string type = Atype(sqlElem);
+			
+			WriteLine(@"        public int Delete{0}{1}({2})
+        {{
+            using(SqlConnection con = new SqlConnection(ConnectionString))
+            using(SqlCommand com = PrepareCommand(con, ct:CommandType.{3}))
+            {{
+                com.CommandText = @""{4}"";"
+				, dtoName
+				, Aval(delMethodElem, "nameAddon")
+				, string.Join(", ", delMethodElem.Elements("p").Select(e=> string.Format("{1} {0}", Aname(e).ToLower(), Atype(e)?? Atype(CalcXpath(dtoElem, string.Format("p[@name='{0}']", Aname(e))).First()) ))) 
+				, string.Compare(type,"Procedure",true)==0? "StoredProcedure":"Text"
+				, string.Compare(type,"WhereClause",true)==0? string.Format("delete from {1} from {0} {1} where {2}",tableName,tableAlias,sqlElem.Value.Trim())
+					:sqlElem.Value.Trim()
+			);
+			
+			// parameters
+			foreach(XElement parElem in delMethodElem.Elements("p"))
+				WriteLine(@"                com.Parameters.AddWithValue(""{0}"", GetNullableParamVal((object){1}));"
+					, Aval(parElem, "sqlName") ?? Aname(parElem)
+					, Aname(parElem).ToLower());
+			
+			WriteLine(@"                return com.ExecuteNonQuery();
+            }
+        }");
+		} // delete methods
+		
+        // merge methods
+        foreach(XElement mergeMethodElem in dtoElem.Elements("mergeMethod"))
+        {
+            bool custom = Ahas(mergeMethodElem, "custom");
+			bool isvoid = Aval(mergeMethodElem, "custom")=="void";
+            WriteLine(@"        [NotNull]
+        public "+(isvoid? "void" : "{0}")+" Merge{1}([NotNull] {0} x"+(multyTabled? @", {0}Table t":"")+(!isvoid&&custom?", bool needCustomSelect = true":"") + @")
+        {{
+            using (SqlConnection con = new SqlConnection(ConnectionString))
+            using (SqlCommand com = PrepareCommand(con))
+            {{", dtoName, Aval(mergeMethodElem, "nameAddon"));
+
+            WriteLine(@"                com.CommandText = "+(multyTabled?@"string.Format(@""merge into dbo.{{0}}": string.Format( @" @""merge into dbo.{0} as t", EnsureInBraces(tableName))));
+            WriteLine(@"                    using (select null a) t1 on ");
+            
+            List<string> joinby = mergeMethodElem.Elements("joinby").Select(e=>Aname(e)).ToList();
+			if(joinby.Count==0)
+				joinby=idElems.Select(e=>Aname(e)).ToList();
+			var joinbyWithdb=joinby.Select(j=>new KeyValuePair<string,string>(j, Adbname(dtoElem.Elements().Where(e=>Aname(e)==j).First())));
+            WriteLine( "                        " + string.Join(" and ", joinbyWithdb.Select(j=>string.Format(" @{0} = t.{1}",EnsureWOBraces(j.Key), EnsureInBraces(j.Value)))) );
+
+            List<string> exclude = mergeMethodElem.Elements("exclude").Select(e=>Aname(e)).ToList();
+            List<XElement> parameters = dtoElem.Elements("p").Where(e => !Ahas(e,"notfromdb")).Where(e=>!exclude.Exists(excl=>Aname(e)==excl)).ToList();
+
+            WriteLine( "                   when matched then update set");
+            List<XElement> updaters = parameters.Where(e=>!joinby.Exists(j=> j==Aname(e))).ToList();
+            WriteLine( string.Join( ", "+NewLine, updaters.Select(u=> string.Format("                         {1} = @{0} ", Aname(u), EnsureInBraces(Adbname(u))))));
+            
+            string updatedDateName = Aval(mergeMethodElem, "useUpdatedDate");
+            if(updatedDateName=="") updatedDateName = "UpdatedDate";
+            if( updatedDateName!=null)
+            {
+                WriteLine(@"                        ,{0} = case when  ", EnsureInBraces(updatedDateName));
+                WriteLine( string.Join( " and " + NewLine, updaters.Select(u=> string.Format("                             ({1} is null and @{0} is null or {1} = @{0}) ", Aname(u), EnsureInBraces(Adbname(u))))));
+                WriteLine(@"                        then {0} else getdate() end", EnsureInBraces(updatedDateName));
+            }
+            
+            WriteLine(@"                    when not matched then insert(");
+            WriteLine( "                            " + string.Join( ", ", parameters.Select(e=>EnsureInBraces(Adbname(e)))));
+            WriteLine(@"                        )values(");
+            WriteLine( "                            " + string.Join( ", ", parameters.Select(e=>"@"+Aname(e)) ));
+			
+            WriteLine(@"                     )"+(isvoid? "" : "output inserted.* ")+@";
+                """+(multyTabled?string.Format(", Get{0}Table(t) )", dtoName):"") +";");
+            
+            
+            parameters.ForEach(e=> WriteLine(@"                com.Parameters.AddWithValue(""{0}"", "+
+                (IsNullable(e)? "GetNullableParamVal(x.{0})": "x.{0}" ) + ");", Aname(e)
+            ));
+
+			if(isvoid)
+				WriteLine(@"                com.ExecuteNonQuery();");
+			else
+            WriteLine(@"
+                // ReSharper disable AssignNullToNotNullAttribute
+                "+(custom? @"return needCustomSelect? Exec{0}One(com): Exec{0}CustomOne(com)" : "return Exec{0}One(com)")+@";
+                // ReSharper restore AssignNullToNotNullAttribute", dtoName);
+			WriteLine(@"            }
+        }");
+        } // merge methods
+                
+            
+        WriteLine("        #endregion");
+        WriteLine();
+        WriteLine();
+
+    }
+	
+    WriteLine(footer);
+    SaveOutput("Db.GeneratedMethods.cs");    
+
+#>
+<#+ 
+public static string MakeIdWhereClause(IEnumerable<XElement> idElems, string alias, string varOrT = "@")
+{
+    if (varOrT != "@") varOrT += ".";
+    return string.Join(" and ", idElems.Select(e => string.Format(@"{0}.{1}={3}{2}", alias, EnsureInBraces(Adbname(e)), varOrT == "@" ? Aname(e) : EnsureInBraces(Aname(e)), varOrT)));
+}
+public static string MakeIdAddSqlParams(IEnumerable<XElement> idElems)
+{
+    return string.Join(NewLine, idElems.Select(e => string.Format(@"                com.Parameters.AddWithValue(""{0}"", {1});", Aname(e), IdParName(e))));
+}
+public static string MakeIdSignature(IEnumerable<XElement> idElems)
+{
+    return string.Join(", ", idElems.Select(e => string.Format("{0} {1}", Atype(e), IdParName(e))));
+}
+public static string MakeFindByIdExec(string dtoName, string varName, List<XElement> idElems)
+{
+    return string.Format(@"Find{0}ById({1})", dtoName, MakeCallByIdParams(varName, idElems));
+}
+public static string MakeCallByIdParams(string varName, List<XElement> idElems)
+{
+    return string.Join(", ", idElems.Select(e => string.Format("{0}:{1}.{2}", IdParName(e), varName, Aname(e))));
+}
+public static string MakeIdParamsByComma(string varName, List<XElement> idElems)
+{
+    return string.Join(", ", idElems.Select(e => string.Format("{0}.{1}", varName, Aname(e))));
+}
+
+public static string IdParName(XElement e)
+{
+    return Aname(e).ToLower() + "_";
+}
+
+static string readMethodsHeadTemplate = @"#region usings
+using System;
+using System.Collections.Generic;
+using System.Configuration;
+using System.Data;
+using System.Data.SqlClient;
+using System.Diagnostics;
+using System.Diagnostics.Contracts;
+using System.Linq;
+using System.Text;
+using System.Web;
+
+using JetBrains.Annotations;
+using My.Common.DAL;
+using My.Common;
+#endregion
+
+// ReSharper disable InconsistentNaming
+// ReSharper disable UnusedAutoPropertyAccessor.Global
+// ReSharper disable MemberCanBePrivate.Global
+
+
+namespace {0}
+{{
+    public partial class Db : DbBase
+    {{
+        public Db(string connectionStringName = null)
+        {{
+            ConnectionString = string.IsNullOrEmpty(connectionStringName) ? ConfigurationManager.ConnectionStrings[""{1}""].ConnectionString
+                 :  ConfigurationManager.ConnectionStrings[connectionStringName].ConnectionString;
+            Init();
+        }}
+        /// <summary>ConnectionString is already configured. Here you can init CommandTimeout field.</summary>
+        partial void Init();
+
+";
+
+static string dtoUpdateHeadTemplate = @"#region usings
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Web;
+
+using JetBrains.Annotations;
+using My.Common.DAL;
+using My.Common;
+#endregion
+
+// ReSharper disable InconsistentNaming
+// ReSharper disable UnusedAutoPropertyAccessor.Global
+// ReSharper disable MemberCanBePrivate.Global
+
+
+namespace {0}
+{{
+    [Serializable]
+    public class {1} : UpdateBase
+    {{";
+
+static string dtoHeadTemplate = @"#region usings
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Web;
+using System.Xml.Serialization;
+
+using JetBrains.Annotations;
+using My.Common.DAL;
+using My.Common;
+#endregion
+
+// ReSharper disable InconsistentNaming
+// ReSharper disable UnusedAutoPropertyAccessor.Global
+// ReSharper disable MemberCanBePrivate.Global
+
+
+namespace {0}
+{{{2}
+    [Serializable]
+    public class {1} : DtoDbBase<{1}>
+    {{";
+
+
+static string finderHeadTemplate = @"#region usings
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Web;
+
+using JetBrains.Annotations;
+using My.Common.DAL;
+using My.Common;
+#endregion
+
+// ReSharper disable InconsistentNaming
+// ReSharper disable UnusedAutoPropertyAccessor.Global
+// ReSharper disable MemberCanBePrivate.Global
+
+
+namespace {0}
+{{{2}
+    [Serializable]
+    [DebuggerDisplay(""IsEmpty={{IsEmpty}}, SearchString=[{{SearchString}}]"")]
+    public class {1} : FinderBase<{1}>
+    {{";
+
+static string footer = @"
+// ReSharper restore InconsistentNaming
+// ReSharper restore UnusedAutoPropertyAccessor.Global
+// ReSharper restore MemberCanBePrivate.Global
+    }
+}";
+#>

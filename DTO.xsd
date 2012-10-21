@@ -1,0 +1,443 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<xs:schema id="DTO" attributeFormDefault="unqualified" elementFormDefault="qualified" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+    <xs:element name="objects">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element maxOccurs="unbounded" name="dto">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:choice minOccurs="1" maxOccurs="unbounded">
+
+                                <xs:element name="p">
+                                    <xs:complexType>
+                                        <xs:attribute name="name" type="xs:string" use="required" />
+                                        <xs:attribute name="type" type="xs:string" use="required" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Тип .NET. Можно указывать Nullable-тип (например int?).
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="nullable" type="xs:boolean" use="optional" />
+                                        <xs:attribute name="dbname" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Имя поля в БД (если отличается от name)
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="summary" type="xs:string" use="optional" />
+                                        <xs:attribute name="id" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Поле-PK для апдейта в БД. Атрибут-маркер (значение игнорируется). Необходимо хотя бы одно id-свойство, если тип указан updateable
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="updateable" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Содержит перечисление (через запятую) имен конструкторов Updater-класса, в которых это поле участвует
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="addonprocessfunction" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Содержит лямбда-выражение для преобразования после вытягивания из БД. Вставляется как C#-код
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="insertable" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Может быть указан список имен в БД - для multitabled
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="notfromdb" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Если поле читается не из БД. Атрибут-маркер (значение игнорируется). Нельзя ставить на id или updateable-свойство. Можно ставить на insertable.
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="finder" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Сигнализирует, участвует ли свойство в finder-методе. Если тип свойства - строка или int, то поиск общий по SearchString, если DateTime - то используется интервал. Можно задать для notfromdb-свойств, тогда для их учета нужно будет указать метод GetWhereClauseAddon(&lt;dto name&gt;Finder uf, List&lt;string&gt; wheres). Если значение list, то будет параметр-список.
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                            <xs:simpleType>
+                                                <xs:restriction base="xs:string">
+                                                    <xs:enumeration value="">
+                                                        <xs:annotation>
+                                                            <xs:documentation>
+                                                            </xs:documentation>
+                                                        </xs:annotation>
+                                                    </xs:enumeration>
+                                                    <xs:enumeration value="liststandart">
+                                                        <xs:annotation>
+                                                            <xs:documentation>
+                                                                Поле-список c автоматической проверкой на вхождение в этот список.
+                                                            </xs:documentation>
+                                                        </xs:annotation>
+                                                    </xs:enumeration>
+                                                    <xs:enumeration value="list">
+                                                        <xs:annotation>
+                                                            <xs:documentation>
+                                                                Поле-список без автоматической проверки на вхождение в этот список.
+                                                            </xs:documentation>
+                                                        </xs:annotation>
+                                                    </xs:enumeration>
+                                                    <xs:enumeration value="range">
+                                                        <xs:annotation>
+                                                            <xs:documentation>
+                                                                Генерируется поле-минимум и поле-максимум для проверки на вхождение в интервал (отрезок).
+                                                            </xs:documentation>
+                                                        </xs:annotation>
+                                                    </xs:enumeration>
+                                                </xs:restriction>
+                                            </xs:simpleType>
+                                        </xs:attribute>
+                                        <xs:attribute name="xmlignore" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Сигнализирует, участвует ли свойство в сериализации в xml (значение игнорируется).
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                    </xs:complexType>
+                                </xs:element>
+                                <xs:element name="mergeMethod">
+                                    <xs:complexType>
+                                        <xs:sequence>
+                                            <xs:choice minOccurs="0" maxOccurs="unbounded">
+                                                <xs:element name="joinby">
+                                                    <xs:annotation>
+                                                        <xs:documentation>
+                                                            Поле соединения для слияния (может быть несколько)
+                                                        </xs:documentation>
+                                                    </xs:annotation>
+                                                    <xs:complexType>
+                                                        <xs:attribute name="name" type="xs:string" use="required" >
+                                                            <xs:annotation>
+                                                                <xs:documentation>
+                                                                    Свойство с таким именем должно быть указано в текущем DTO
+                                                                </xs:documentation>
+                                                            </xs:annotation>
+                                                        </xs:attribute>
+                                                    </xs:complexType>
+                                                </xs:element>
+                                                <xs:element name="exclude">
+                                                    <xs:annotation>
+                                                        <xs:documentation>
+                                                            Не участвующее во вставке и обновлении поле (например, суррогатный identity-ключ, CreatedDate etc)
+                                                        </xs:documentation>
+                                                    </xs:annotation>
+                                                    <xs:complexType>
+                                                        <xs:attribute name="name" type="xs:string" use="required" >
+                                                            <xs:annotation>
+                                                                <xs:documentation>
+                                                                    Свойство с таким именем должно быть указано в текущем DTO
+                                                                </xs:documentation>
+                                                            </xs:annotation>
+                                                        </xs:attribute>
+                                                    </xs:complexType>
+                                                </xs:element>
+                                            </xs:choice>
+                                        </xs:sequence>
+                                        <xs:attribute name="nameAddon" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Суффикс к имени метода. По умолчанию имя метода Merge
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="custom" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Если значение равно void, то метод будет void. Иначе, но если указан, то используются Find&lt;dto name&gt;SelectTemplate и Exec&lt;dto name&gt;CustomOne, которые надо указать в основном классе Db.
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="useUpdatedDate" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Использовать ли поле с датой апдейта. Значение атрибута - имя поля, пустая строка означает имя UpdatedDate. Дата проставляется только в случае изменения хотя бы в одном поле апдейта
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                    </xs:complexType>
+                                </xs:element>
+                                <xs:element name="deleteMethod">
+                                    <xs:complexType>
+                                        <xs:sequence>
+                                            <xs:choice minOccurs="0" maxOccurs="unbounded">
+                                                <xs:element name="p">
+                                                    <xs:complexType>
+                                                        <xs:attribute name="name" type="xs:string" use="required" >
+                                                            <xs:annotation>
+                                                                <xs:documentation>
+                                                                    имя парметра в методе
+                                                                </xs:documentation>
+                                                            </xs:annotation>
+                                                        </xs:attribute>
+                                                        <xs:attribute name="sqlName" type="xs:string" use="optional" >
+                                                            <xs:annotation>
+                                                                <xs:documentation>
+                                                                    имя параметра в sql-запросе
+                                                                </xs:documentation>
+                                                            </xs:annotation>
+                                                        </xs:attribute>
+                                                        <xs:attribute name="type" type="xs:string" use="optional" >
+                                                            <xs:annotation>
+                                                                <xs:documentation>
+                                                                    .NET-тип параметра. Нужен, если параметр не является полем этого DTO
+                                                                </xs:documentation>
+                                                            </xs:annotation>
+                                                        </xs:attribute>
+                                                    </xs:complexType>
+                                                </xs:element>
+                                            </xs:choice>
+                                            
+                                            <xs:element name="sql" minOccurs="1" maxOccurs="1">
+                                                <xs:complexType>
+                                                    
+                                                    <xs:attribute name="type" use="required" >
+                                                        <xs:annotation>
+                                                            <xs:documentation>
+                                                                Какой тип текста запроса - Text, Procedure или where-кляуза
+                                                            </xs:documentation>
+                                                        </xs:annotation>
+                                                        <xs:simpleType>
+                                                            <xs:restriction base="xs:string">
+                                                                <xs:enumeration value="Text" />
+                                                                <xs:enumeration value="Procedure" />
+                                                                <xs:enumeration value="WhereClause" />
+                                                            </xs:restriction>
+                                                        </xs:simpleType>
+
+                                                    </xs:attribute>
+                                                </xs:complexType>
+                                            </xs:element>
+                                            
+                                        </xs:sequence>
+                                        <xs:attribute name="nameAddon" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Суффикс к имени метода. По умолчанию имя метода Delete&lt;dto name&gt;
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="summary" type="xs:string" use="optional" />
+                                    </xs:complexType>
+                                </xs:element>
+                                <xs:element name="findMethod">
+                                    <xs:complexType>
+                                        <xs:sequence>
+                                            <xs:choice minOccurs="0" maxOccurs="unbounded">
+                                                <xs:element name="p">
+                                                    <xs:complexType>
+                                                        <xs:attribute name="name" type="xs:string" use="required" >
+                                                            <xs:annotation>
+                                                                <xs:documentation>
+                                                                    Если поле с таким именем существует в текущем DTO, то берется его тип
+                                                                </xs:documentation>
+                                                            </xs:annotation>
+                                                        </xs:attribute>
+                                                        <xs:attribute name="sqlName" type="xs:string" use="optional" >
+                                                            <xs:annotation>
+                                                                <xs:documentation>
+                                                                    имя параметра в sql-запросе. Нужен только если параметр не является полем этого DTO, и sql-имя должно быть отличным от name
+                                                                </xs:documentation>
+                                                            </xs:annotation>
+                                                        </xs:attribute>
+                                                        <xs:attribute name="type" type="xs:string" use="optional" >
+                                                            <xs:annotation>
+                                                                <xs:documentation>
+                                                                    .NET-тип параметра. Нужен, если параметр не является полем этого DTO
+                                                                </xs:documentation>
+                                                            </xs:annotation>
+                                                        </xs:attribute>
+                                                    </xs:complexType>
+                                                </xs:element>
+                                            </xs:choice>
+
+                                            <xs:element name="sql" minOccurs="0" maxOccurs="1">
+                                                <xs:complexType>
+
+                                                    <xs:attribute name="type" use="required" >
+                                                        <xs:annotation>
+                                                            <xs:documentation>
+                                                                Какой тип текста запроса - Text, Procedure или where-кляуза
+                                                            </xs:documentation>
+                                                        </xs:annotation>
+                                                        <xs:simpleType>
+                                                            <xs:restriction base="xs:string">
+                                                                <xs:enumeration value="Text" />
+                                                                <xs:enumeration value="Procedure" />
+                                                                <xs:enumeration value="WhereClause" />
+                                                            </xs:restriction>
+                                                        </xs:simpleType>
+
+                                                    </xs:attribute>
+                                                </xs:complexType>
+                                            </xs:element>
+
+                                        </xs:sequence>
+                                        <xs:attribute name="nameAddon" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Суффикс к имени метода. По умолчанию имя метода Find&lt;dto name&gt;
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="orderby" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Кляуза order by, если указано, то просто конкатенируется к order by (должно быть sql-имя)
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="custom" type="xs:string" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Атрибут-маркер (значение игнорируется). Если указан, то используются Find&lt;dto name&gt;SelectTemplate и Exec&lt;dto name&gt;CustomOne, которые надо указать в основном классе Db.
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                        </xs:attribute>
+                                        <xs:attribute name="summary" type="xs:string" use="optional" >
+                                        </xs:attribute>
+                                        <xs:attribute name="return" use="optional" >
+                                            <xs:annotation>
+                                                <xs:documentation>
+                                                    Либо one, либо list.
+                                                </xs:documentation>
+                                            </xs:annotation>
+                                            <xs:simpleType>
+                                                <xs:restriction base="xs:string">
+                                                    <xs:enumeration value="one" />
+                                                    <xs:enumeration value="list" />
+                                                </xs:restriction>
+                                            </xs:simpleType>
+                                        </xs:attribute>
+                                    </xs:complexType>
+                                </xs:element>
+                                <xs:element name="finderAddonFields">
+                                    <xs:annotation>
+                                        <xs:documentation>
+                                            Дополнительные поля в finder-классе.
+                                        </xs:documentation>
+                                    </xs:annotation>
+                                    <xs:complexType>
+                                        <xs:sequence>
+                                            <xs:choice minOccurs="1" maxOccurs="unbounded">
+                                                <xs:element name="p">
+                                                    <xs:complexType>
+
+                                                        <xs:attribute name="name" type="xs:string" use="required" />
+                                                        <xs:attribute name="type" type="xs:string" use="required" >
+                                                            <xs:annotation>
+                                                                <xs:documentation>
+                                                                    Тип .NET. Можно указывать Nullable-тип (например int?), массив (int[]), список (List&lt;int&gt;)
+                                                                </xs:documentation>
+                                                            </xs:annotation>
+                                                        </xs:attribute>
+                                                        <xs:attribute name="canFindByNull" type="xs:boolean" use="optional" >
+                                                            <xs:annotation>
+                                                                <xs:documentation>
+                                                                    Генерировать ли дополнительное свойство SearchByNull для текущего свойства. По умолчанию - false.
+                                                                </xs:documentation>
+                                                            </xs:annotation>
+                                                        </xs:attribute>
+                                                        <xs:attribute name="summary" type="xs:string" use="optional" />
+                                                    </xs:complexType>
+                                                </xs:element>
+                                            </xs:choice>
+                                        </xs:sequence>
+                                    </xs:complexType>
+                                </xs:element>
+                            </xs:choice>
+                        </xs:sequence>
+                        <xs:attribute name="name" type="xs:string" use="required" />
+                        <xs:attribute name="deleteableById" type="xs:string" use="optional" >
+                            <xs:annotation>
+                                <xs:documentation>
+                                    Атрибут-маркер (значение игнорируется). Должно быть указано хотя бы одно свойство с атрибутом id. Поддержка multitabled.
+                                </xs:documentation>
+                            </xs:annotation>
+                        </xs:attribute>
+                        <xs:attribute name="updateable" type="xs:string" use="optional" >
+                            <xs:annotation>
+                                <xs:documentation>
+                                    Должно быть указано хотя бы одно свойство с атрибутом id и хотя бы одно updateable. Может быть значение void, тогда метод будет void.
+                                </xs:documentation>
+                            </xs:annotation>
+                        </xs:attribute>
+                        <xs:attribute name="insertable" type="xs:string" use="optional" >
+                            <xs:annotation>
+                                <xs:documentation>
+                                    Должен быть указан атрибут tableName, и хотя бы одно поле insertable. Может быть значение void, тогда метод будет void.
+                                </xs:documentation>
+                            </xs:annotation>
+                        </xs:attribute>
+                        <xs:attribute name="tableName" type="xs:string" use="optional" >
+                            <xs:annotation>
+                                <xs:documentation>
+                                    Имя таблицы в БД. Необходимо, если указан атрибут updateable, insertable, generateFindByIdMethod или generateGetAllMethod. Формат - [&lt;table name&gt;( &lt;table alias&gt;)?]. Alias нужен, если generateFindByIdMethod=custom. Может быть multitabled.
+                                </xs:documentation>
+                            </xs:annotation>
+                        </xs:attribute>
+                        <xs:attribute name="summary" type="xs:string" use="optional" />
+                        <xs:attribute name="generateGetAllMethod" type="xs:string" use="optional" >
+                            <xs:annotation>
+                                <xs:documentation>
+                                    Генерировать ли метод вида GetAll&lt;dto name&gt; (select-ящий все строки из БД). Необходимо указать атрибут tableName. Формат - [(order by &lt;clause&gt;)?]
+                                </xs:documentation>
+                            </xs:annotation>
+                        </xs:attribute>
+                        <xs:attribute name="generateFindByIdMethod" type="xs:string" use="optional" >
+                            <xs:annotation>
+                                <xs:documentation>
+                                    Генерировать ли метод вида FindById&lt;dto name&gt; (select-ящий объект по id). Необходимо хотя бы одно id-свойство и атрибут tableName. Формат - [(custom)?]. Если значение custom, то используется Find&lt;dto name&gt;SelectTemplate и Exec&lt;dto name&gt;CustomOne, которые надо указать в основном классе Db.
+                                </xs:documentation>
+                            </xs:annotation>
+                        </xs:attribute>
+                        <xs:attribute name="generateFinder" type="xs:string" use="optional" >
+                            <xs:annotation>
+                                <xs:documentation>
+                                    Атрибут-маркер (значение игнорируется). Генерировать ли метод вида Find&lt;dto name&gt;Count(&lt;dto name&gt;Finder) и Find&lt;dto name&gt;s. Необходимо хотя бы одно id-свойство, атрибут tableName и хотя бы одно свойство finder. Если используется поиск по сложному полю, необходимо задать метод GetWhereClauseAddon(&lt;dto name&gt;Finder uf, List&lt;string&gt; wheres)
+                                </xs:documentation>
+                            </xs:annotation>
+                        </xs:attribute>
+                        <xs:attribute name="debuggerdisplay" type="xs:string" use="optional" >
+                            <xs:annotation>
+                                <xs:documentation>
+                                    Без изменений переносится в атрибут DebuggerDisplay
+                                </xs:documentation>
+                            </xs:annotation>
+                        </xs:attribute>
+                        <xs:attribute name="tostring" type="xs:string" use="optional" >
+                            <xs:annotation>
+                                <xs:documentation>
+                                    Переопределение метода ToString() для DTO классов. Если значение пустое - берется значение debuggerdisplay. В противном случае значение напрямую подставляется в возвращаемую строку.
+                                </xs:documentation>
+                            </xs:annotation>
+                        </xs:attribute>
+                        <xs:attribute name="xmlserializable" type="xs:string" use="optional" >
+                            <xs:annotation>
+                                <xs:documentation>
+                                    Применяется для xml сериализации. (Добавление атрибута [XmlElement(IsNullable = false/true)] к свойствам).
+                                </xs:documentation>
+                            </xs:annotation>
+                        </xs:attribute>
+
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+            <xs:attribute name="namespace" type="xs:string" use="required" />
+            <xs:attribute name="ConnectionStringName" type="xs:string" use="required" />
+        </xs:complexType>
+    </xs:element>
+</xs:schema>

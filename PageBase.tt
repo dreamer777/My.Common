@@ -1,0 +1,134 @@
+﻿<#@ include file="Common.tt" #>
+<#
+    XDocument xdoc = ReadLocalXml("PageBase.xml");
+    
+	string ns = Aval(xdoc.Root, "namespace");
+	string className = Aval(xdoc.Root, "classname");
+	
+	string dalns = Aval(xdoc.Root, "DALnamespace");
+	List<string> nss = (Aval(xdoc.Root, "usingNamespaces") ?? "").Split(new[]{','}, StringSplitOptions.RemoveEmptyEntries)
+		.Select(s=>s.Trim()).Where(s=>!string.IsNullOrEmpty(s))
+		.Union(new[]{dalns}).ToList();
+	
+    WriteLine(header, string.Join(NewLine, nss.Select(x=>string.Format("using {0};", x))) 
+		, ns, className);
+
+    WriteLine(@"        #region select all methods");
+    
+    foreach(XElement e in CalcXpath(xdoc, "PageBase/selectall"))
+    {
+        string dtoName = Aval(e, "dto");
+        bool persistent = Abool(e, "persistent", true);
+        string idname = Aval(e, "idname");
+		string idtype = Ahas(e, "idtype") ? Aval(e, "idtype") : "int";
+        string order = Aval(e, "orderby");
+        bool orderDesc = false;
+        if(order != null)
+        {
+            order = order.Trim();
+            if(order.ToLower().EndsWith("desc"))
+            {
+                order = order.Substring(0, order.Length-4);
+                orderDesc = true;
+            }
+        }
+		
+		string selectCustom = Aval(e, "selectCustom");
+        
+        WriteLine(@"        #region {0}", dtoName);
+
+        WriteLine(@"        public static void Select{0}sAddonEx([NotNull]List<{0}> l){{ l.ForEach(x=>Select{0}sAddon(x));}}", dtoName);
+        WriteLine(@"        public static void Select{0}sAddonEx({0} x){{Select{0}sAddon(x);}}", dtoName);
+        WriteLine(@"        static partial void Select{0}sAddon({0} x);", dtoName);
+        
+        if(persistent)
+        {
+            string fieldname = "_" + FirstLower(dtoName) + "s";
+            WriteLine(@"        static Dictionary<{2}, {0}> {1};", dtoName, fieldname, idtype);
+            
+            WriteLine(@"        [NotNull]
+        public static Dictionary<{3}, {0}> {0}s
+        {{
+            get
+            {{
+                if ({1} == null)
+                {{
+                    List<{0}> l = Db.GetAll{0}("+(string.IsNullOrEmpty(selectCustom)?"": ("selectCustom: "+selectCustom ) )+@");
+                    Select{0}sAddonEx(l);
+                    {1} = l.ToDictionary(x => x.{2});
+                }}
+                return {1};
+            }}
+        }}", dtoName, fieldname, idname, idtype);
+            
+        }
+
+        WriteLine(@"        public static List<{0}> SelectAll{0}s()
+        {{
+            List<{0}> rv = "+(persistent?@"{0}s.Values":"Db.GetAll{0}("+(string.IsNullOrEmpty(selectCustom)?"": ("selectCustom: "+selectCustom ) )+@")")+@"{1}.ToList(); "+(persistent?"":@"
+            Select{0}sAddonEx(rv);")+@"
+            return rv;
+        }}",
+            dtoName, 
+            order==null?"" : string.Format(@".OrderBy{1}(x => {0})", order, orderDesc? "Descending":"")
+        );
+            
+		if(Ahas(e, "generateSelectAllForUI"))
+		{
+        	WriteLine(@"        public static ForUI[] SelectAll{0}sForCbl()
+        {{
+            List<{0}> l = "+(persistent?@"{0}s.Values":"Db.GetAll{0}("+(string.IsNullOrEmpty(selectCustom)?"": ("selectCustom: "+selectCustom ) )+@")")+@"{1}.ToList();"+(persistent?"":@"
+            Select{0}sAddonEx(l);")+@"
+            ForUI[] rv = l.Select(x => new ForUI(x, ForUI.For.Cbl)).ToArray();
+            return rv;
+        }}",
+	            dtoName, 
+	            order==null?"" : string.Format(@".OrderBy{1}(x => {0})", order, orderDesc? "Descending":"")
+	        );
+	            
+	        WriteLine(@"        public static ForUI[] SelectAll{0}sForDdl()
+        {{
+            List<{0}> l = "+(persistent?@"{0}s.Values":"Db.GetAll{0}("+(string.IsNullOrEmpty(selectCustom)?"": ("selectCustom: "+selectCustom ) )+@")")+@"{1}.ToList();"+(persistent?"":@"
+            Select{0}sAddonEx(l);")+@"
+            ForUI[] rv = l.Select(x => new ForUI(x, ForUI.For.Ddl)).ToArray();
+            return rv;
+        }}",
+	            dtoName, 
+	            order==null?"" : string.Format(@".OrderBy{1}(x => {0})", order, orderDesc? "Descending":"")
+	        );
+        }
+			
+        WriteLine(@"        #endregion");
+        
+        WriteLine(2);
+    }
+    
+    WriteLine(@"        #endregion");
+    
+    WriteLine(@"    }
+}");
+    SaveOutput("PageBase.Generated.cs");
+#>
+<#+
+    static string header= @"#region usings
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Linq;
+using System.Reflection;
+using System.Web;
+using System.Web.UI;
+using System.Web.UI.WebControls;
+
+using JetBrains.Annotations;
+
+{0}
+
+#endregion
+
+
+namespace {1}
+{{
+    public abstract partial class {2}
+    {{";
+#>
