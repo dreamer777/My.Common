@@ -56,6 +56,7 @@ namespace My.Common
                 catch (DatabaseNotEnabledForNotificationException ex)
                 {
                     SqlCacheDependencyAdmin.EnableNotifications(ConfigurationManager.ConnectionStrings[ConnectionStringName].ConnectionString);
+                    SqlCacheDependencyAdmin.EnableTableForNotifications(ConfigurationManager.ConnectionStrings[ConnectionStringName].ConnectionString, table);
                 }
                 catch (TableNotEnabledForNotificationException ex)
                 {
