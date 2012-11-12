@@ -21,6 +21,11 @@ namespace My.Common
                 : base(message) {}
 
 
+        [StringFormatMethod("message")]
+        public MyException(string message, params object[] args)
+                : this(string.Format(message, args)) {}
+
+
         public MyException(string message, Exception innerException)
                 : base(message, innerException) {}
 
@@ -33,7 +38,7 @@ namespace My.Common
         [TerminatesProgram]
         public static void Throw(string message, params object[] args)
         {
-            throw new PageDeniedException(message, args);
+            throw new MyException(message, args);
         }
     }
 }
