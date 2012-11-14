@@ -27,6 +27,10 @@ namespace My.Common
 
         /// <param name="attachments"> collection of ( (file name, file extension), body ) </param>
         /// <param name="messageBody"> html </param>
+        /// <exception cref="SmtpFailedRecipientsException"></exception>
+        /// <exception cref="SmtpException"></exception>
+        /// <exception cref="InvalidOperationException"></exception>
+        /// <returns> returns error desc </returns>
         public string SendMessage([NotNull] string mailFrom, [NotNull] string mailTo, [NotNull] string messageBody, [NotNull] string messageTitle,
                                   IEnumerable<KeyValuePair<Tuple<string, string>, byte[]>> attachments = null)
         {
@@ -59,7 +63,6 @@ namespace My.Common
                 objEmail.SubjectEncoding = Encoding.UTF8;
 
                 SmtpClient smtp = new SmtpClient();
-                //smtp.Credentials = new NetworkCredential("trade", "", "ok");
 
                 if (attachments != null)
                     foreach (KeyValuePair<Tuple<string, string>, byte[]> a in attachments.Where(x => x.Key != null && x.Value != null && x.Value.Length > 0))
@@ -67,7 +70,15 @@ namespace My.Common
                                                                                    a.Key.Item1.EndsWith(a.Key.Item2) ? a.Key.Item1
                                                                                            : (a.Key.Item1 + (a.Key.Item2.StartsWith(".") ? "" : ".") + a.Key.Item2)));
 
-                smtp.Send(objEmail);
+                try
+                {
+                    smtp.Send(objEmail);
+                }
+                catch (Exception ex)
+                {
+                    Logger.ErrorException("smtp.Send", ex);
+                    return SetStatusException(mailTo, null, emailId, ex);
+                }
             }
             SetStatusOk(emailId);
 
