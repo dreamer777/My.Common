@@ -132,5 +132,18 @@ namespace My.Common
                                )
                                + (onlyDate && !omitDate ? "" : (" HH:mm" + (withSeconds ? ":ss" : ""))));
         }
+
+
+        public static string SizeForUI(long size)
+        {
+            if (size < 1 << 10)
+                return size.ToString() + " B";
+            if (size < 1 << 20)
+                return (size >> 10).ToString() + " KB";
+            if (size < 1 << 30)
+                return (size >> 20).ToString() + "." + (((size%(1 << 20)) >> 10)/100).ToString() + " MB";
+
+            return (size >> 30).ToString() + "." + (((size%(1 << 30)) >> 20)/100).ToString() + " GB";
+        }
     }
 }
