@@ -21,7 +21,7 @@ namespace My.Common.Web
     public abstract class PageBaseAnonym<TParameters> : PageBase
             where TParameters : PageParametersBase
     {
-        static readonly Logger _logger = LogManager.GetLogger("PageBaseAnonym");
+        static readonly Logger Logger = LogManager.GetLogger("PageBaseAnonym");
 
         /// <summary>
         ///     Page parameters
@@ -39,8 +39,13 @@ namespace My.Common.Web
             }
             catch (PageDeniedException ex)
             {
-                _logger.WarnException("", ex);
-                SetResponseAsMyException(ex);
+                if (IsPostBack)
+                {
+                    Logger.WarnException("", ex);
+                    Response.Redirect(Request.RawUrl, true);
+                }
+                else
+                    SetResponseAsMyException(ex);
             }
         }
 

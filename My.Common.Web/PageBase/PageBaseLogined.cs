@@ -6,6 +6,8 @@ using System.Text;
 
 using JetBrains.Annotations;
 
+using NLog;
+
 
 #endregion
 
@@ -16,6 +18,9 @@ namespace My.Common.Web
     public abstract class PageBaseLogined<TParameters> : PageBaseAnonym<TParameters>
             where TParameters : PageParametersBase
     {
+        static readonly Logger Logger = LogManager.GetLogger("PageBaseLogined");
+
+
         [UsedImplicitly]
         protected override void Page_PreInit()
         {
@@ -31,7 +36,13 @@ namespace My.Common.Web
             }
             catch (PageDeniedException ex)
             {
-                SetResponseAsMyException(ex);
+                if (IsPostBack)
+                {
+                    Logger.WarnException("", ex);
+                    Response.Redirect(Request.RawUrl, true);
+                }
+                else
+                    SetResponseAsMyException(ex);
             }
         }
 

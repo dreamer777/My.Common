@@ -86,7 +86,7 @@ namespace My.Common
             {
                 d = new Dictionary<int, T>();
                 AggregateCacheDependency acd = GetAggregateCacheDependency<T>();
-                c.Add(typeof (T).Name, d, acd, DateTime.Today.AddDays(1), TimeSpan.Zero, CacheItemPriority.Normal, null);
+                c.Insert(typeof (T).Name, d, acd, DateTime.Today.AddDays(1), TimeSpan.Zero, CacheItemPriority.Normal, null);
             }
 
             lock (d)
