@@ -971,8 +971,9 @@
             {{
                 string whereClause = GetWhereClause(f, com);
                 if(f==null) f = new {0}Finder();
-                com.CommandText = string.Format(startIndex == 0 && count == int.MaxValue
+                com.CommandText = string.Format(startIndex == 0 ? count == int.MaxValue
                                                         ? @"" select {3}.* from dbo.{2} {3} {{1}} order by {{0}} ""
+                                                        : @"" select top "" + count + @"" {3}.* from dbo.{2} {3} {{1}} order by {{0}} ""
                                                         : @"" select * from (
                                                                 select {3}.*, row_number() over(order by {{0}}) r from dbo.{2} {3} 
                                                                  {{1}}
