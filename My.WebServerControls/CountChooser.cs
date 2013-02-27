@@ -22,7 +22,7 @@ using JetBrains.Annotations;
 namespace My.WebServerControls
 {
     [DefaultProperty("Text")]
-    [ToolboxData(@"<{0}:CountChooser runat=""server"" ID="""" Counts=""10,20,50,100,200"" Title=""Выводить на странице:"" DefaultValue=""100""></{0}:CountChooser>")]
+    [ToolboxData(@"<{0}:CountChooser runat=""server"" ID="""" Counts=""10,20,50,100,200"" Title=""Выводить на странице:"" DefaultValue=""100""/>")]
     public class CountChooser : DropDownList
     {
         int[] _counts;
@@ -49,7 +49,8 @@ namespace My.WebServerControls
                 int beginCut = _counts.Where(s => s >= cnt).Min();
                 Items.Clear();
                 Items.AddRange(_counts.Where(s => s < cnt).Select(s => new ListItem(s.ToString(), s.ToString()))
-                                       .Concat(new[] {new ListItem("вывести все", (prevSelectedValue < beginCut ? beginCut : prevSelectedValue).ToString())}).ToArray());
+                                       .Concat(new[] {new ListItem("вывести все", (prevSelectedValue < beginCut ? beginCut : prevSelectedValue).ToString())})
+                                       .ToArray());
             }
             else
             {
@@ -68,20 +69,20 @@ namespace My.WebServerControls
         {
             get
             {
-                object obj = ViewState["DefaultValue"];
+                object obj = ViewState["df"];
                 return (obj == null) ? _counts.Min() : (int) obj;
             }
             set
             {
-                ViewState["DefaultValue"] = value;
+                ViewState["df"] = value;
                 SelectedValue = value;
             }
         }
 
 
-        protected override void OnInit(EventArgs e)
+        protected override void OnLoad(EventArgs e)
         {
-            base.OnInit(e);
+            base.OnLoad(e);
 
             if (!Page.IsPostBack)
             {
