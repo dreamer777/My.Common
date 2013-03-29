@@ -39,23 +39,27 @@ namespace My.WebServerControls
 
         public void SetAsCount(int cnt)
         {
-            Visible = cnt >= _counts.Min();
-            if (!Visible) return;
+            this.Visible = cnt >= _counts.Min();
+            if (!this.Visible) return;
 
             int prevSelectedValue = SelectedValue;
 
             if (cnt <= _counts.Max())
             {
                 int beginCut = _counts.Where(s => s >= cnt).Min();
-                Items.Clear();
-                Items.AddRange(_counts.Where(s => s < cnt).Select(s => new ListItem(s.ToString(), s.ToString()))
-                                       .Concat(new[] {new ListItem("вывести все", (prevSelectedValue < beginCut ? beginCut : prevSelectedValue).ToString())})
-                                       .ToArray());
+                this.Items.Clear();
+                this.Items.AddRange(_counts.Where(s => s < cnt).Select(s => new ListItem(s.ToString(), s.ToString()))
+                                            .Concat(new[]
+                                                    {
+                                                            new ListItem("вывести все", (prevSelectedValue < beginCut ? beginCut : prevSelectedValue)
+                                                                                                .ToString())
+                                                    })
+                                            .ToArray());
             }
             else
             {
-                DataSource = _counts;
-                DataBind();
+                this.DataSource = _counts;
+                this.DataBind();
             }
             SelectedValue = prevSelectedValue;
         }
@@ -88,7 +92,6 @@ namespace My.WebServerControls
             {
                 DataSource = _counts;
                 DataBind();
-                SelectedValue = DefaultValue;
             }
         }
 
