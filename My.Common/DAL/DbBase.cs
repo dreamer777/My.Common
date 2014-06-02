@@ -13,16 +13,16 @@ using JetBrains.Annotations;
 
 using System.Linq;
 
-
 #endregion
 
 
 
 namespace My.Common.DAL
 {
-    public abstract partial class DbBase
+    public abstract partial class DbBase : MarshalByRefObjectNoTimeout
     {
-        protected string ConnectionString { get; set; }
+        [NotNull]
+        public string ConnectionString { get; protected set; }
 
 
         /// <summary>
@@ -30,6 +30,7 @@ namespace My.Common.DAL
         /// </summary>
         // ReSharper disable ConvertToConstant.Global
         protected int CommandTimeout = 30;
+
 
         // ReSharper restore ConvertToConstant.Global
 
@@ -57,7 +58,6 @@ namespace My.Common.DAL
             foreach (object i in l)
             {
                 if (i != null && sqltype == null)
-                {
                     // first elem
                     if (i is int || i is int?)
                         sqltype = "Int";
@@ -65,7 +65,6 @@ namespace My.Common.DAL
                         sqltype = "String";
                     else
                         throw new Exception(string.Format("Type {0} not supported", i.GetType()));
-                }
                 dt.Rows.Add(i);
             }
             SqlParameter p = com.Parameters.AddWithValue(name, dt);
@@ -101,13 +100,14 @@ namespace My.Common.DAL
         // ReSharper disable CSharpWarnings::CS1573
         // ReSharper disable MemberCanBePrivate.Global
 
+
         #region update support
         /// <param name="pkFilters"> Must not contains DBNull parameters </param>
         [CanBeNull]
         protected T Update<T>([NotNull] UpdateBase u, [NotNull] string tableName,
                               [NotNull] KeyValuePair<string, object>[] pkFilters,
                               [CanBeNull] Func<IDataRecord, T> reader)
-                where T : DtoDbBase<T>
+            where T : DtoDbBase<T>
         {
             bool outputInserted = reader != null;
             if (u.IsEmpty)
@@ -121,9 +121,12 @@ namespace My.Common.DAL
                 StringBuilder sb;
                 if (outputInserted)
                     sb = new StringBuilder("declare @id as table ("
-                                           + string.Join(", ", pkFilters.Select(kvp => EnsureInBraces(kvp.Key) + " " + GetSqlType(kvp.Value.GetType())))
+                                           + string.Join(", ",
+                                                         pkFilters.Select(
+                                                             kvp => EnsureInBraces(kvp.Key) + " " + GetSqlType(kvp.Value.GetType())))
                                            + "); update ");
-                else sb = new StringBuilder("update ");
+                else
+                    sb = new StringBuilder("update ");
 
                 sb.Append(EnsureInBraces(tableName));
                 sb.Append(" set ");
@@ -134,11 +137,14 @@ namespace My.Common.DAL
                     sb.Append(" output " + string.Join(", ", pkFilters.Select(kvp => "inserted." + EnsureInBraces(kvp.Key))) + " into @id ");
 
                 return AddWhereAndExecute(pkFilters, reader, conn, sb, com,
-                                          outputInserted ?
-                                                                 "; select t.* from " + EnsureInBraces(tableName) + " t where " +
-                                                                 string.Join(" and ", pkFilters.Select(kvp => string.Format("t.{0}=(select top 1 {0} from @id)", EnsureInBraces(kvp.Key))))
-                                                  : null
-                        );
+                                          outputInserted
+                                              ? "; select t.* from " + EnsureInBraces(tableName) + " t where " +
+                                                string.Join(" and ",
+                                                            pkFilters.Select(
+                                                                kvp =>
+                                                                string.Format("t.{0}=(select top 1 {0} from @id)", EnsureInBraces(kvp.Key))))
+                                              : null
+                    );
             }
         }
 
@@ -172,13 +178,15 @@ namespace My.Common.DAL
 
 
         /// <param name="pkFilters"> Must not contains DBNull parameters </param>
-        protected void Update([NotNull] UpdateBase u, [NotNull] string tableName, [NotNull] IEnumerable<KeyValuePair<string, object>> pkFilters)
+        protected void Update([NotNull] UpdateBase u, [NotNull] string tableName,
+                              [NotNull] IEnumerable<KeyValuePair<string, object>> pkFilters)
         {
             Update<DtoDummy>(u, tableName, pkFilters.ToArray(), null);
         }
 
 
-        protected void Update([NotNull] List<UpdateBase> uArr, [NotNull] string tableName, [NotNull] List<IEnumerable<KeyValuePair<string, object>>> pkFiltersArr)
+        protected void Update([NotNull] List<UpdateBase> uArr, [NotNull] string tableName,
+                              [NotNull] List<IEnumerable<KeyValuePair<string, object>>> pkFiltersArr)
         {
             Update<DtoDummy>(uArr, tableName, pkFiltersArr, null);
         }
@@ -187,7 +195,7 @@ namespace My.Common.DAL
         protected List<T> Update<T>([NotNull] List<UpdateBase> uArr, [NotNull] string tableName,
                                     [NotNull] List<IEnumerable<KeyValuePair<string, object>>> pkFiltersArr,
                                     [CanBeNull] Func<IDataRecord, T> reader)
-                where T : DtoDbBase<T>
+            where T : DtoDbBase<T>
         {
             if (uArr.Count != pkFiltersArr.Count)
                 throw new Exception("Updater and filter lists must have same size");
@@ -203,7 +211,6 @@ namespace My.Common.DAL
                 {
                     com.Parameters.Clear();
                     if (uArr[i].CountChangedProps == 0)
-                    {
                         if (outputInserted)
                         {
                             StringBuilder sb = new StringBuilder("select * from  ");
@@ -221,7 +228,6 @@ namespace My.Common.DAL
                         }
                         else
                             output.Add(null);
-                    }
                     else
                     {
                         com.CommandType = CommandType.Text;
@@ -229,9 +235,12 @@ namespace My.Common.DAL
                         StringBuilder sb;
                         if (outputInserted)
                             sb = new StringBuilder("declare @id as table ("
-                                                   + string.Join(", ", pkFiltersArr[i].Select(kvp => EnsureInBraces(kvp.Key) + " " + GetSqlType(kvp.Value.GetType())))
+                                                   + string.Join(", ",
+                                                                 pkFiltersArr[i].Select(
+                                                                     kvp => EnsureInBraces(kvp.Key) + " " + GetSqlType(kvp.Value.GetType())))
                                                    + "); update ");
-                        else sb = new StringBuilder("update ");
+                        else
+                            sb = new StringBuilder("update ");
 
                         sb.Append(EnsureInBraces(tableName));
                         sb.Append(" set ");
@@ -239,7 +248,8 @@ namespace My.Common.DAL
                         AddEqualityParameters(uArr[i].ChangedProps, com, sb, " , ");
 
                         if (outputInserted)
-                            sb.Append(" output " + string.Join(", ", pkFiltersArr[i].Select(kvp => "inserted." + EnsureInBraces(kvp.Key))) + " into @id ");
+                            sb.Append(" output " + string.Join(", ", pkFiltersArr[i].Select(kvp => "inserted." + EnsureInBraces(kvp.Key)))
+                                      + " into @id ");
 
                         sb.Append(" where ");
 
@@ -247,8 +257,10 @@ namespace My.Common.DAL
 
                         if (outputInserted)
                             sb.Append("; select t.* from " + EnsureInBraces(tableName) + " t where " +
-                                      string.Join(" and ", pkFiltersArr[i].Select(kvp => string.Format("t.{0}=(select top 1 {0} from @id)", EnsureInBraces(kvp.Key))))
-                                    );
+                                      string.Join(" and ",
+                                                  pkFiltersArr[i].Select(
+                                                      kvp => string.Format("t.{0}=(select top 1 {0} from @id)", EnsureInBraces(kvp.Key))))
+                                );
 
                         com.CommandText = sb.ToString();
 
@@ -266,8 +278,9 @@ namespace My.Common.DAL
 
 
         [CanBeNull]
-        protected T DoSelect<T>([NotNull] string tableName, [NotNull] IEnumerable<KeyValuePair<string, object>> pkFilters, [NotNull] Func<IDataRecord, T> reader)
-                where T : DtoDbBase<T>
+        protected T DoSelect<T>([NotNull] string tableName, [NotNull] IEnumerable<KeyValuePair<string, object>> pkFilters,
+                                [NotNull] Func<IDataRecord, T> reader)
+            where T : DtoDbBase<T>
         {
             using (SqlConnection conn = new SqlConnection(ConnectionString))
             using (SqlCommand com = conn.CreateCommand())
@@ -286,9 +299,12 @@ namespace My.Common.DAL
         static string EnsureInBraces([NotNull] string name)
         {
             name = name.Trim();
-            if (name.StartsWith("dbo.")) return "dbo." + EnsureInBraces(name.Substring(4));
-            if (!name.StartsWith("[")) name = "[" + name;
-            if (!name.EndsWith("]")) name = name + "]";
+            if (name.StartsWith("dbo."))
+                return "dbo." + EnsureInBraces(name.Substring(4));
+            if (!name.StartsWith("["))
+                name = "[" + name;
+            if (!name.EndsWith("]"))
+                name = name + "]";
             return name;
         }
 
@@ -297,8 +313,10 @@ namespace My.Common.DAL
         static string EnsureWOBraces([NotNull] string name)
         {
             name = name.Trim();
-            if (name.StartsWith("[")) name = name.Substring(1);
-            if (name.EndsWith("]")) name = name.Substring(0, name.Length - 1);
+            if (name.StartsWith("["))
+                name = name.Substring(1);
+            if (name.EndsWith("]"))
+                name = name.Substring(0, name.Length - 1);
             return name;
         }
 
@@ -307,7 +325,7 @@ namespace My.Common.DAL
         protected static T AddWhereAndExecute<T>([NotNull] IEnumerable<KeyValuePair<string, object>> pkFfilters,
                                                  [CanBeNull] Func<IDataRecord, T> reader, [NotNull] IDbConnection conn,
                                                  [NotNull] StringBuilder sb, [NotNull] SqlCommand com, [CanBeNull] string addon = null)
-                where T : DtoDbBase<T>
+            where T : DtoDbBase<T>
         {
             sb.Append(" where ");
 
@@ -342,6 +360,7 @@ namespace My.Common.DAL
             sb.Append(string.Join(delimeter, sets));
         }
         #endregion
+
 
         #region get nullable support
         protected static T? GetNullableVal<T>(object o, T? def = default(T?)) where T : struct
@@ -378,6 +397,7 @@ namespace My.Common.DAL
         }
         #endregion
 
+
         #region xmlserialization support
         public static string SerializeDTO<T>([NotNull] DtoDbBase<T> dto) where T : DtoDbBase<T>
         {
@@ -403,6 +423,7 @@ namespace My.Common.DAL
             return retDTO;
         }
         #endregion
+
 
         #region execute helpers
         /// <summary>
@@ -468,13 +489,12 @@ namespace My.Common.DAL
         {
             if (pars != null)
                 foreach (P p in pars)
-                {
                     if (p.Val is IEnumerable && !(p.Val is string) && !(p.Val is IEnumerable<byte>))
                         AddListParam(p.Name, (IEnumerable) p.Val, com);
                     else
                         com.Parameters.AddWithValue(p.Name, GetNullableParamVal(p.Val));
-                }
         }
+
 
         #region ExecuteNonQuery
         protected int ExecuteNonQuery([NotNull] string sql, params P[] pars)
@@ -513,6 +533,7 @@ namespace My.Common.DAL
         }
         #endregion
 
+
         #region ExecuteScalar
         protected T ExecuteScalar<T>([NotNull] string sql, params P[] pars)
         {
@@ -549,6 +570,7 @@ namespace My.Common.DAL
             }
         }
         #endregion
+
 
         #region ExecuteList
         protected List<T> ExecuteList<T>([NotNull] string sql, params P[] pars)
@@ -599,6 +621,7 @@ namespace My.Common.DAL
         }
         #endregion
 
+
         #region ExecuteReader
         protected void ExecuteReader([NotNull] string sql, [NotNull] Action<SqlDataReader> reader, params P[] pars)
         {
@@ -634,7 +657,9 @@ namespace My.Common.DAL
         }
         #endregion
 
+
         #endregion
+
 
         // ReSharper restore MemberCanBePrivate.Global
         // ReSharper restore CSharpWarnings::CS1573

@@ -22,10 +22,9 @@
 	List<XElement> dtoElems = xDocumentList.SelectMany(xd => xd.Root.Elements("dto")).ToList();
 
 
-
+    // DTO classes
     foreach (XElement dtoElem in dtoElems)
     {
-        // DTO classes
         string dtoName = Aname(dtoElem);
 
         string typeSummary = Asummary(dtoElem);
@@ -96,6 +95,8 @@
             
             if (attr != null)
                 WriteLine("        " + (bool.Parse(attr.Value) ? "[CanBeNull]" : "[NotNull]"));
+			else if( Ahas(propElem, "id") )
+				WriteLine("        [NotNull]");
             WriteLine("        public {0}{2} {1} {{ get; set; }}", propType, propName, IsValueType(propType)&&attr != null && bool.Parse(attr.Value)? "?":"");
             WriteLine();
         }
@@ -130,7 +131,7 @@
                 , isEmpty ? "return " + GetToStringByDebuggerDisplay(Aval(dtoElem, "debuggerdisplay")) + ";": Aval(dtoElem, "tostring").Trim());
         }
 
-        WriteLine(footer);
+        WriteLine(footer_cs);
 
         SaveOutput(dtoName + ".cs");
     }
@@ -347,7 +348,7 @@
 		
 
 		
-        WriteLine(footer);
+        WriteLine(footer_cs);
 
         SaveOutput(dtoName + "Finder.cs");
     } // finder classes
@@ -412,7 +413,8 @@
 	        string idType = Atype(idElem);
 
 	        string idSummary = Asummary(idElem);
-	        if (idDbName != idName) idSummary += string.Format(" dbName={0}. ", idDbName);
+	        if (idDbName != idName) 
+				idSummary += string.Format(" dbName={0}. ", idDbName);
 	        idSummary += " PK. ";
 
 	        if (!string.IsNullOrEmpty(idSummary))
@@ -420,6 +422,7 @@
 
 			WriteLine(@"
         {0}
+		[NotNull]
         public {1} {2} {{ get; private set; }}"+NewLine, idSummary, idType, idName);
 		}
         
@@ -478,14 +481,16 @@
 		WriteLine(@"            return this.IsEmpty;
         }");
 		
-        WriteLine(footer);
+        WriteLine(footer_cs);
 
         SaveOutput(className + ".cs");
     }	
 
 	
     // methods - Db.Generated.cs
-    WriteLine(readMethodsHeadTemplate, ns, connectionStringName);
+    WriteLine(db_generated_cs_HeadTemplate, ns, connectionStringName);
+
+	List<string> sbMethods = new List<string>();
 
     foreach (XElement dtoElem in dtoElems)
     {
@@ -493,6 +498,7 @@
 
         List<XElement> idElems = CalcXpath(dtoElem, "p[@id]").ToList();
 
+		sbMethods.Add(string.Format(@"        #region {0} methods", dtoName));
         WriteLine(@"        #region {0} methods", dtoName);
         // base read method
         WriteLine(@"        [NotNull]
@@ -654,6 +660,8 @@
         string genById = Aval(dtoElem, "generateFindByIdMethod");
         if (genById != null)
         {
+			sbMethods.Add(string.Format(@"        [CanBeNull] {{0}}{0} Find{0}ById({1});"
+				,dtoName,MakeIdSignature(idElems)));
             WriteLine(@"        [CanBeNull]
         public {0} Find{0}ById({4})
         {{
@@ -687,8 +695,10 @@
 
 			string pkCompare = string.Join(" && ", idElems.Select(e=>string.Format("xu.{0} == default({1})", Aname(e), Atype(e))));
 			
-            WriteLine((isVoid ? "" : @"        [NotNull]
-") + @"        public " + (isVoid ? "void" : @"{0}") + @" Update([NotNull] {0}Updater xu{4}" + (multyTabled ? ", {0}Table table" : "") + @")
+			string updateMethodSignature = string.Format((isVoid ? "" : @"        [NotNull]
+") + @"        {{0}}" + (isVoid ? "void" : @"{0}") + @" Update([NotNull] {0}Updater xu{1}" + (multyTabled ? ", {0}Table table" : "") + @")", dtoName, genById != "custom" ? "" : isVoid? "":", bool needCustomSelect = true");
+			sbMethods.Add(string.Format(updateMethodSignature, "{0}")+";");
+            WriteLine(updateMethodSignature.Replace("{0}", "public ")+@"
         {{
             if ("+pkCompare+@")
                 throw new Exception(""Update {0}: pk in {0}Updater object is not initialized"");
@@ -716,8 +726,10 @@
 
 			pkCompare = string.Join(" && ", idElems.Select(e=>string.Format("u.{0} == default({1})", Aname(e), Atype(e))));
 
-            WriteLine((isVoid ? "" : @"        [NotNull]
-") + @"        public " + (isVoid ? "void" : @"List<{0}>") + @" Update([NotNull] IEnumerable<{0}Updater> xu{4}" + (multyTabled ? ", {0}Table table" : "") + @")
+			updateMethodSignature = string.Format((isVoid ? "" : @"        [NotNull]
+") + @"        {{0}}" + (isVoid ? "void" : @"List<{0}>") + @" Update([NotNull] IEnumerable<{0}Updater> xu{1}" + (multyTabled ? ", {0}Table table" : "") + @")", dtoName, genById != "custom" ? "" : isVoid? "": ", bool needCustomSelect = true");
+			sbMethods.Add(string.Format(updateMethodSignature, "{0}")+";");
+            WriteLine(updateMethodSignature.Replace("{0}", "public ")+@"
         {{
             List<UpdateBase> uArr = new List<UpdateBase>();
             List<IEnumerable<KeyValuePair<string, object>>> pkFiltersArr = new List<IEnumerable<KeyValuePair<string, object>>>();
@@ -755,8 +767,10 @@
             Match m = r.Match(genAll);
             string orderbyClause = m.Groups["ORDERBY"].Success ? m.Groups["ORDERBY"].Captures[0].Value : null;
 
-            WriteLine(@"        [NotNull]
-        public List<{0}> GetAll{0}({4})
+			string getallMethodSignature = string.Format(@"        [NotNull]
+        {{0}}List<{0}> GetAll{0}({1})", dtoName, genById == "custom" ? "bool selectCustom = false" : "");
+			sbMethods.Add(string.Format(getallMethodSignature, "{0}")+";");
+            WriteLine(getallMethodSignature.Replace("{0}", "public ")+@"
         {{
             using (SqlConnection con = new SqlConnection(ConnectionString))
             using (SqlCommand com = PrepareCommand(con))
@@ -789,8 +803,8 @@
 			if(!string.IsNullOrEmpty(summary))
 				WriteLine(summaryTemplate(2), summary);
 
-            Write(@"        [{3}]
-        public {0} Find{1}{2}(", returnType == "list" ? "List<" + dtoName + ">" : dtoName
+			string methodSignature = string.Format(@"        [{3}]
+        {{0}}{0} Find{1}{2}(", returnType == "list" ? "List<" + dtoName + ">" : dtoName
 				, dtoName, nameAddon, returnType == "list" ? "NotNull" : "CanBeNull");
 
             List<XElement> parFromDtoElems = findMethodElem.Elements("p")
@@ -803,13 +817,15 @@
                             .ToList();
 
 			//[NotNull] string login, [NotNull] string hash
-            Write(string.Join(", ", parFromDtoElems.Select(e => string.Format("{0}{1} {2}",
+            methodSignature+=string.Join(", ", parFromDtoElems.Select(e => string.Format("{0}{1} {2}",
 		                !Ahas(e, "nullable") ? "" : bool.Parse(Aval(e, "nullable")) ? "[CanBeNull] " : "[NotNull] ",
 		                Atype(e),
 		                Aname(e).ToLower()
 					)).Concat(parAddonElems.Select(e => string.Format("{0} {1}", Atype(e), Aname(e)) ))
-				)
-			);
+				)+")";
+
+			sbMethods.Add(string.Format(methodSignature,"{0}")+";");
+			WriteLine(string.Format(methodSignature,"public "));
 
             List<KeyValuePair<string, string>> dbNames = parFromDtoElems
                             .Select(e => new KeyValuePair<string, string>(Adbname(e), Atype(e))).ToList();
@@ -818,7 +834,7 @@
 			if(sqlElem!=null)
 				commandType = string.Compare(Atype(sqlElem), "Procedure", true)==0? "StoredProcedure":"Text";
 			
-            WriteLine(@")
+            WriteLine(@"
         {{
             using (SqlConnection con = new SqlConnection(ConnectionString))
             using (SqlCommand com = PrepareCommand(con, ct:CommandType.{1}))
@@ -944,10 +960,12 @@
             );
 
 
-            WriteLine(@"        /// <summary>
+			string findcoungSignature = string.Format(@"        /// <summary>
         ///     For gridviews with paging
         /// </summary>
-        public int Find{0}Count([CanBeNull] {0}Finder f)
+        {{0}}int Find{0}Count([CanBeNull] {0}Finder f)", dtoName);
+			sbMethods.Add(string.Format(findcoungSignature, "{0}")+";");
+            WriteLine(string.Format(findcoungSignature, "public ") + @"
         {{
             using (SqlConnection con = new SqlConnection(ConnectionString))
             using (SqlCommand com = PrepareCommand(con))
@@ -961,8 +979,11 @@
         }}", dtoName, EnsureInBraces(tableName), tableAlias
             );
 
-            WriteLine(@"        [NotNull]
-        public List<{0}> Find{0}s([CanBeNull] {0}Finder f, string orderBy = null, int startIndex = 0, int count = int.MaxValue{6})
+
+			string findSignature = string.Format(@"        [NotNull]
+        {{0}}List<{0}> Find{0}s([CanBeNull] {0}Finder f, string orderBy = null, int startIndex = 0, int count = int.MaxValue{1})", dtoName, Aval(dtoElem, "generateFindByIdMethod") == "custom" ? ", bool needCustomSelect = false" : "");
+			sbMethods.Add(string.Format(findSignature,"{0}")+";");
+            WriteLine(string.Format(findSignature, "public ")+@"
         {{
             if (string.IsNullOrEmpty(orderBy)) orderBy = ""{1}"";
 
@@ -995,9 +1016,8 @@
 				, null
                 , Aval(dtoElem, "generateFindByIdMethod") == "custom"
                     ? string.Format(@"                if(needCustomSelect) rv = rv.Select(x => {1}).ToList();", dtoName, MakeFindByIdExec(dtoName,"x", idElems))
-                    : "",
-                Aval(dtoElem, "generateFindByIdMethod") == "custom"
-                    ? ", bool needCustomSelect = false" : ""
+                    : ""
+                , Aval(dtoElem, "generateFindByIdMethod") == "custom" ? ", bool needCustomSelect = false" : ""
             );
 
         } // finder method
@@ -1007,7 +1027,10 @@
 			&& !string.IsNullOrEmpty(tableAlias) && !string.IsNullOrEmpty(tableName))
 		{
 			bool finder = Ahas(dtoElem, "generateFinder");
-			WriteLine(@"        public int? Find{0}PageIndex({1}int pageSize, {3}, string orderBy = null)
+
+			string findpageindexSignature = string.Format(@"        {{0}}int? Find{0}PageIndex({1}int pageSize, {2}, string orderBy = null)", dtoName, finder? ("[CanBeNull] " + dtoName + "Finder f, "):"", MakeIdSignature(idElems));
+			sbMethods.Add(string.Format(findpageindexSignature, "{0}")+";");
+			WriteLine(string.Format(findpageindexSignature, "public ")+@"
         {{
             if (string.IsNullOrEmpty(orderBy)) orderBy = ""{2}"";
             using (SqlConnection con = new SqlConnection(ConnectionString))
@@ -1054,8 +1077,11 @@
             bool customSelect = Aval(dtoElem, "generateFindByIdMethod") == "custom";
 
 			int j=0;
-            WriteLine((isVoid ? "" : @"        [NotNull]
-") + @"        public " + (isVoid ? "void" : @"{0}") + @" Insert([NotNull] {0} x{5}" + (multyTabled ? ", {0}Table table" : "") + @")
+
+			string insertSignature = string.Format((isVoid ? "" : @"        [NotNull]
+") + @"        {{0}}" + (isVoid ? "void" : @"{0}") + @" Insert([NotNull] {0} x{1}" + (multyTabled ? ", {0}Table table" : "") + @")", dtoName, customSelect ? ", bool needCustomSelect = false" : "");
+			sbMethods.Add(string.Format(insertSignature, "{0}")+";");
+            WriteLine(string.Format(insertSignature, "public ")+@"
         {{
             using (SqlConnection con = new SqlConnection(ConnectionString))
             using (SqlCommand com = PrepareCommand(con))
@@ -1078,9 +1104,9 @@
 {4}
                 " + (isVoid ? "com.ExecuteNonQuery()" : @"{0} ins = Exec{0}One(com)") + @";"
 				, 
-				dtoName, 
-				EnsureInBraces(tableName),
-            	string.Join(", ", props.Select(p => string.IsNullOrEmpty(Aval(p, "insertable")) ?
+				dtoName
+				,EnsureInBraces(tableName)
+            	,string.Join(", ", props.Select(p => string.IsNullOrEmpty(Aval(p, "insertable")) ?
                         EnsureInBraces(Adbname(p))
                         : (
                             "\" +( " +
@@ -1092,13 +1118,13 @@
                             + "\"no_such_table\" )+ @\""
                         )
                         ).ToArray()
-                    ),
-            	string.Join(", ", props.Select(p => "@" + Aname(p)).ToArray()),
-            	string.Join("", props.Select(p => new { Name = Aname(p), nullable = IsNullable(p) })
+                    )
+            	,string.Join(", ", props.Select(p => "@" + Aname(p)).ToArray())
+            	,string.Join("", props.Select(p => new { Name = Aname(p), nullable = IsNullable(p) })
                         .Select(o => string.Format(@"                com.Parameters.AddWithValue(""{0}"", {1});"+NewLine, o.Name,
                             string.Format(o.nullable ? @"GetNullableParamVal(x.{0})" : "x.{0}", o.Name)
-                        )).ToArray()),
-                    customSelect ? ", bool needCustomSelect = false" : ""
+                        )).ToArray())
+				,customSelect ? ", bool needCustomSelect = false" : ""
             );
 
             if (!isVoid)
@@ -1117,8 +1143,11 @@
 
 
             j = 0;
-            WriteLine((isVoid ? "" : @"        [NotNull]
-") + @"        public " + (isVoid ? "void" : @"List<{0}>") + @" Insert([NotNull] IEnumerable<{0}> x{5}" + (multyTabled ? ", {0}Table table" : "") + @")
+
+			insertSignature = string.Format((isVoid ? "" : @"        [NotNull]
+") + @"        {{0}}" + (isVoid ? "void" : @"List<{0}>") + @" Insert([NotNull] IEnumerable<{0}> x{1}" + (multyTabled ? ", {0}Table table" : "") + @")", dtoName, customSelect ? ", bool needCustomSelect = false" : "");
+			sbMethods.Add(string.Format(insertSignature, "{0}")+";");
+            WriteLine(string.Format(insertSignature, "public ")+@"
         {{
             using(SqlConnection con = new SqlConnection(ConnectionString))
             using (SqlCommand com = PrepareCommand(con))
@@ -1140,10 +1169,10 @@
                 sb.Remove(sb.Length - 9, 9);
                 com.CommandText = sb.ToString();
                   
-                " + (isVoid ? "com.ExecuteNonQuery()" : @"List<{0}> ins = Exec{0}List(com)") + @";", 
-					dtoName, 
-					EnsureInBraces(tableName),
-                    string.Join(", ", props.Select(p => string.IsNullOrEmpty(Aval(p, "insertable")) ?
+                " + (isVoid ? "com.ExecuteNonQuery()" : @"List<{0}> ins = Exec{0}List(com)") + @";"
+					,dtoName
+					,EnsureInBraces(tableName)
+                    ,string.Join(", ", props.Select(p => string.IsNullOrEmpty(Aval(p, "insertable")) ?
                         EnsureInBraces(Adbname(p))
                         : (
                             "\" +( " +
@@ -1155,14 +1184,14 @@
                             + "\"no_such_table\" )+ @\""
                         )
                         ).ToArray()
-                    ),
-                    string.Join(", ", props.Select(p => "@" + Aname(p) + "{0}").ToArray()),
-                    string.Join("", props.Select(p => new { Name = Aname(p), nullable = Atype(p).EndsWith("?") || Ahas(p, "nullable") && bool.Parse(Aval(p, "nullable")) })
+                    )
+                    ,string.Join(", ", props.Select(p => "@" + Aname(p) + "{0}").ToArray())
+                    ,string.Join("", props.Select(p => new { Name = Aname(p), nullable = Atype(p).EndsWith("?") || Ahas(p, "nullable") && bool.Parse(Aval(p, "nullable")) })
                         .Select(o => string.Format(@"                    com.Parameters.AddWithValue(string.Format(""{0}"", counter), {1});
 ", o.Name + @"{0}",
                             string.Format(o.nullable ? @"GetNullableParamVal(xi.{0})" : "xi.{0}", o.Name)
-                        )).ToArray()),
-                    customSelect ? ", bool needCustomSelect = false" : ""
+                        )).ToArray())
+                    ,customSelect ? ", bool needCustomSelect = false" : ""
             );
 
             if (!isVoid)
@@ -1183,7 +1212,9 @@
         string delete = Aval(dtoElem, "deleteableById");
         if (delete != null)
         {
-            WriteLine(@"        public int Delete{0}("+ MakeIdSignature(idElems) + (multyTabled ? @", {0}Table t" : "") + @", int userDeleterId)
+			string deleteSignature = string.Format(@"        {{0}}int Delete{0}("+ MakeIdSignature(idElems) + (multyTabled ? @", {0}Table t" : "") + @", int userDeleterId)", dtoName);
+			sbMethods.Add(string.Format(deleteSignature, "{0}")+";");
+            WriteLine(string.Format(deleteSignature, "public ")+@"
         {{
             Delete{0}Addon(userDeleterId, {4});
             using(SqlConnection con = new SqlConnection(ConnectionString))
@@ -1214,7 +1245,10 @@
 			XElement sqlElem = delMethodElem.Element("sql");
 			string type = Atype(sqlElem);
 			
-			WriteLine(@"        public int Delete{0}{1}({2})
+			string deleteSignature = string.Format(@"        {{0}}int Delete{0}{1}({2})", dtoName, Aval(delMethodElem, "nameAddon"), string.Join(", ", delMethodElem.Elements("p").Select(e=> string.Format("{1} {0}", Aname(e).ToLower(), Atype(e)?? Atype(CalcXpath(dtoElem, string.Format("p[@name='{0}']", Aname(e))).First()) ))) 
+			);
+			sbMethods.Add(string.Format(deleteSignature,"{0}")+";");
+			WriteLine(string.Format(deleteSignature,"public ")+@"
         {{
             using(SqlConnection con = new SqlConnection(ConnectionString))
             using(SqlCommand com = PrepareCommand(con, ct:CommandType.{3}))
@@ -1244,8 +1278,11 @@
         {
             bool custom = Ahas(mergeMethodElem, "custom");
 			bool isvoid = Aval(mergeMethodElem, "custom")=="void";
-            WriteLine(@"        [NotNull]
-        public "+(isvoid? "void" : "{0}")+" Merge{1}([NotNull] {0} x"+(multyTabled? @", {0}Table t":"")+(!isvoid&&custom?", bool needCustomSelect = true":"") + @")
+
+			string mergeSignature = string.Format(@"        [NotNull]
+        {{0}}"+(isvoid? "void" : "{0}")+" Merge{1}([NotNull] {0} x"+(multyTabled? @", {0}Table t":"")+(!isvoid&&custom?", bool needCustomSelect = true":"") + @")", dtoName, Aval(mergeMethodElem, "nameAddon"));
+			sbMethods.Add(string.Format(mergeSignature,"{0}")+";");
+            WriteLine(string.Format(mergeSignature,"public ")+@"
         {{
             using (SqlConnection con = new SqlConnection(ConnectionString))
             using (SqlCommand com = PrepareCommand(con))
@@ -1304,13 +1341,25 @@
         WriteLine("        #endregion");
         WriteLine();
         WriteLine();
+		sbMethods.Add("        #endregion");
+		sbMethods.Add("");
+		sbMethods.Add("");
 
     }
 	
-    WriteLine(footer);
+    WriteLine(footer_cs);
     SaveOutput("Db.GeneratedMethods.cs");    
 
+	SaveIDb(ns, sbMethods);  	
+	SaveDbStub(ns, sbMethods);  	
 #>
+
+
+
+
+
+
+
 <#+ 
 public static string MakeIdWhereClause(IEnumerable<XElement> idElems, string alias, string varOrT = "@")
 {
@@ -1343,9 +1392,10 @@ public static string IdParName(XElement e)
     return Aname(e).ToLower() + "_";
 }
 
-static string readMethodsHeadTemplate = @"#region usings
+static string db_generated_cs_HeadTemplate = @"#region usings
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
@@ -1356,6 +1406,7 @@ using System.Text;
 using System.Web;
 
 using JetBrains.Annotations;
+
 using My.Common.DAL;
 using My.Common;
 #endregion
@@ -1367,12 +1418,24 @@ using My.Common;
 
 namespace {0}
 {{
-    public partial class Db : DbBase
+    public partial class Db : DbBase, IDb
     {{
         public Db(string connectionStringName = null)
         {{
-            ConnectionString = string.IsNullOrEmpty(connectionStringName) ? ConfigurationManager.ConnectionStrings[""{1}""].ConnectionString
-                 :  ConfigurationManager.ConnectionStrings[connectionStringName].ConnectionString;
+            ConnectionStringSettingsCollection cscol = ConfigurationManager.ConnectionStrings;
+            if (cscol == null)
+                throw new Exception(""ConfigurationManager.ConnectionStrings==null"");
+
+            string csName = string.IsNullOrEmpty(connectionStringName)
+                                ? ""{1}""
+                                : connectionStringName;
+
+            ConnectionStringSettings cs = cscol[csName];
+            if (cs == null)
+                throw new MyException(""No connection string [{{0}}]"", csName);
+
+            ConnectionString = cs.ConnectionString;
+
             Init();
         }}
         /// <summary>ConnectionString is already configured. Here you can init CommandTimeout field.</summary>
@@ -1383,6 +1446,7 @@ namespace {0}
 static string dtoUpdateHeadTemplate = @"#region usings
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Linq;
 using System.Web;
@@ -1406,6 +1470,7 @@ namespace {0}
 static string dtoHeadTemplate = @"#region usings
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Linq;
 using System.Web;
@@ -1431,6 +1496,7 @@ namespace {0}
 static string finderHeadTemplate = @"#region usings
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Linq;
 using System.Web;
@@ -1452,10 +1518,112 @@ namespace {0}
     public class {1} : FinderBase<{1}>
     {{";
 
-static string footer = @"
+
+
+static string footer_cs = @"
 // ReSharper restore InconsistentNaming
 // ReSharper restore UnusedAutoPropertyAccessor.Global
 // ReSharper restore MemberCanBePrivate.Global
     }
 }";
+
+
+
+static string idb_HeadTemplate = @"#region usings
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+using JetBrains.Annotations;
+
+#endregion
+
+// ReSharper disable InconsistentNaming
+// ReSharper disable UnusedAutoPropertyAccessor.Global
+// ReSharper disable MemberCanBePrivate.Global
+// ReSharper disable UnusedMemberInSuper.Global
+// ReSharper disable UnusedMember.Global
+// ReSharper disable UnusedMethodReturnValue.Global
+
+
+namespace {0}
+{{
+    public interface IDb : IDbUserAddon
+    {{
+        string ConnectionString {{ get; }}
+
+
+";
+
+
+static string dbstub_HeadTemplate = @"#region usings
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+using JetBrains.Annotations;
+
+using My.Common.DAL;
+
+#endregion
+
+// ReSharper disable InconsistentNaming
+// ReSharper disable UnusedAutoPropertyAccessor.Global
+// ReSharper disable MemberCanBePrivate.Global
+// ReSharper disable UnusedMemberInSuper.Global
+// ReSharper disable UnusedMember.Global
+// ReSharper disable UnusedMethodReturnValue.Global
+
+
+namespace {0}
+{{
+    public partial class CompleteStubDb : DbBase, IDb
+    {{
+";
+
+
+
+static string footer_idb = @"
+    }
+
+}
+
+// ReSharper restore InconsistentNaming
+// ReSharper restore UnusedAutoPropertyAccessor.Global
+// ReSharper restore MemberCanBePrivate.Global
+// ReSharper restore UnusedMemberInSuper.Global
+// ReSharper restore UnusedMember.Global
+// ReSharper restore UnusedMethodReturnValue.Global
+";
+
+
+static string  stubMethodBody=@"        { throw new NotImplementedException(); }";
+
+
+public void SaveIDb(string ns, List<string> sbMethods)
+{
+    WriteLine(string.Format(idb_HeadTemplate, ns));
+    WriteLine(string.Join(Environment.NewLine, sbMethods.Select( l=>string.Format(l,"") ) ));
+    WriteLine(footer_idb);
+
+    SaveOutput("IDb.cs");    	
+}
+public void SaveDbStub(string ns, List<string> sbMethods)
+{
+    WriteLine(string.Format(dbstub_HeadTemplate, ns));
+    WriteLine(string.Join(Environment.NewLine, sbMethods.Select(l=>
+	{
+		l=string.Format(l.TrimEnd(), "public virtual ");
+		if(l.EndsWith(";"))
+			l=l.Substring(0,l.Length-1)+Environment.NewLine+stubMethodBody;
+		return l;
+	})));
+    WriteLine(footer_idb);
+
+    SaveOutput("CompleteStubDb.cs");    	
+}
 #>

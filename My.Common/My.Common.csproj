@@ -41,6 +41,8 @@
     <Reference Include="System.configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.ServiceModel" />
     <Reference Include="System.Web" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -51,7 +53,9 @@
   <ItemGroup>
     <Compile Include="AttachmentHelper.cs" />
     <Compile Include="CacheBase.cs" />
+    <Compile Include="ConfigCommon.cs" />
     <Compile Include="ConfigExpressionBuilder.cs" />
+    <Compile Include="AutoMexServiceHost.cs" />
     <Compile Include="DAL\DbBase.cs" />
     <Compile Include="DAL\DtoDbBase.cs" />
     <Compile Include="DAL\DtoDummy.cs" />
@@ -61,6 +65,7 @@
     <Compile Include="Extensions.cs" />
     <Compile Include="ForUICommon.cs" />
     <Compile Include="MailSender.cs" />
+    <Compile Include="MarshalByRefObjectNoTimeout.cs" />
     <Compile Include="PageDeniedException.cs" />
     <Compile Include="Parser.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

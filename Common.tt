@@ -230,8 +230,7 @@
 {0}/// </summary>", "".PadLeft(intend*4));
 	}
 	
-#>
-<#+
+#><#+
     List<string> __savedOutputs = new List<string>();
     Engine __engine = new Engine();
 
@@ -350,8 +349,9 @@
         // DTE does not expose the project GUID that exists at in the msbuild project file.        
         // Cannot use MSBuild object model because it uses a static instance of the Engine,         
         // and using the Project will cause it to be unloaded from the engine when the         
-        // GC collects the variable that we declare.       
-        using (XmlReader projectReader = XmlReader.Create(project.FileName))
+        // GC collects the variable that we declare.      
+		var fn = project.FileName; 
+        using (XmlReader projectReader = XmlReader.Create(fn))
         {
             projectReader.MoveToContent();
             object nodeName = projectReader.NameTable.Add("ProjectGuid");
